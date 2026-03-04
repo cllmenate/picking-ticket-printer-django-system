@@ -19,6 +19,10 @@ media/
 # Arquivos de configuração
 .env
 
+# Docker volumes / dados locais
+postgres_data/
+staticfiles/
+
 # Arquivos de logs
 *.log
 
@@ -35,3 +39,7 @@ Thumbs.db
 __pycache__
 .pytest_cache/
 .mypy_cache/
+
+# QZ Tray certificates – sensitive, never commit
+certs/digital-certificate.txt
+certs/private-key.pem

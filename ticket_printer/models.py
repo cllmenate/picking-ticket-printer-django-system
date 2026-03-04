@@ -2,18 +2,23 @@ from django.db import models
 
 
 class Pedido(models.Model):
-    numero_pedido = models.CharField(max_length=50, unique=True)
-    cliente_nome = models.CharField(max_length=200)
-    endereco_logradouro = models.CharField(max_length=200)
-    endereco_numero = models.CharField(max_length=50)
-    endereco_bairro = models.CharField(max_length=100)
-    endereco_cidade = models.CharField(max_length=100)
-    endereco_uf = models.CharField(max_length=2)
-    endereco_cep = models.CharField(max_length=20)
-    rota = models.CharField(max_length=100, blank=True, null=True)
+    picking = models.CharField(max_length=20)
+    numero_pedido = models.CharField(max_length=30)
+    rota = models.CharField(max_length=50, blank=True, null=True)
+    cliente_codigo = models.CharField(max_length=30, blank=True, null=True)
+    cliente_nome = models.TextField(blank=True, null=True)
+    cpf_cnpj = models.CharField(max_length=20, blank=True, null=True)
+    endereco_logradouro = models.TextField(blank=True, null=True)
+    endereco_numero = models.TextField(blank=True, null=True)
+    endereco_bairro = models.TextField(blank=True, null=True)
+    endereco_cidade = models.TextField(blank=True, null=True)
+    endereco_uf = models.CharField(max_length=2, blank=True, null=True)
+    endereco_cep = models.CharField(max_length=15, blank=True, null=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "pedidos"
+        unique_together = [("picking", "numero_pedido")]
 
     def __str__(self):
         return f"Pedido {self.numero_pedido} - {self.cliente_nome}"
@@ -21,12 +26,15 @@ class Pedido(models.Model):
 
 class PedidoItem(models.Model):
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="itens")
-    codigo_produto = models.CharField(max_length=50)
-    descricao = models.CharField(max_length=200)
-    quantidade = models.IntegerField()
+    codigo_produto = models.CharField(max_length=50, blank=True, null=True)
+    descricao = models.TextField(blank=True, null=True)
+    quantidade = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    unidade = models.CharField(max_length=20, blank=True, null=True)
+    linha_origem = models.IntegerField(blank=True, null=True)
 
     class Meta:
         db_table = "pedido_itens"
+        unique_together = [("pedido", "codigo_produto", "descricao", "linha_origem")]
 
     def __str__(self):
         return f"{self.codigo_produto} - {self.descricao} ({self.quantidade})"
@@ -34,15 +42,16 @@ class PedidoItem(models.Model):
 
 class PedidoVolume(models.Model):
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="volumes")
-    volume_numero = models.IntegerField()
+    volume_num = models.IntegerField()
     total_volumes = models.IntegerField()
-    data_criacao = models.DateTimeField(auto_now_add=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "pedido_volumes"
+        unique_together = [("pedido", "volume_num")]
 
     def __str__(self):
-        return f"Volume {self.volume_numero}/{self.total_volumes} do Pedido {self.pedido.numero_pedido}"
+        return f"Volume {self.volume_num}/{self.total_volumes} do Pedido {self.pedido.numero_pedido}"
 
 
 class VolumeItem(models.Model):
@@ -50,10 +59,11 @@ class VolumeItem(models.Model):
         PedidoVolume, on_delete=models.CASCADE, related_name="itens_rateados"
     )
     item = models.ForeignKey(PedidoItem, on_delete=models.CASCADE)
-    quantidade_neste_volume = models.IntegerField()
+    quantidade = models.DecimalField(max_digits=18, decimal_places=3, default=0)
 
     class Meta:
         db_table = "volume_itens"
+        unique_together = [("volume", "item")]
 
     def __str__(self):
-        return f"{self.quantidade_neste_volume}x {self.item.codigo_produto} no Volume {self.volume.volume_numero}"
+        return f"{self.quantidade}x {self.item.codigo_produto} no Volume {self.volume.volume_num}"

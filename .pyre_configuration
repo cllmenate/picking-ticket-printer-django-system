@@ -1,0 +1,9 @@
+{
+  "source_directories": [
+    "core",
+    "ticket_printer"
+  ],
+  "search_path": [
+    ".venv/Lib/site-packages"
+  ]
+}

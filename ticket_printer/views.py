@@ -4,13 +4,19 @@ import os
 
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.db import transaction
 from django.db.models import Q
+import json
+import os
+import threading
+from django.core.files.storage import FileSystemStorage
 
-from .models import Pedido, PedidoVolume, VolumeItem
+from .models import Pedido, PedidoVolume, VolumeItem, ImportBatch
+from .services import ExcelReader, DatabaseService
 
 CERTS_DIR = os.path.join(settings.BASE_DIR, "certs")
 
@@ -28,25 +34,56 @@ def qz_certificate(request):
 @csrf_exempt
 def qz_sign(request):
     """
-    Sign the challenge string sent by QZ Tray using the private key.
-    QZ Tray sends the raw string to sign; we return the base64 SHA-512 signature.
+    Sign the challenge string sent by QZ Tray using the private key (SHA1/RSA).
+    Tries the 'cryptography' package first; falls back to the system 'openssl'
+    binary (always available in the Docker base image) if not installed.
     """
-    try:
-        from cryptography.hazmat.primitives import hashes, serialization
-        from cryptography.hazmat.primitives.asymmetric import padding
-    except ImportError:
-        return HttpResponse("cryptography package not installed", status=500)
-
-    to_sign = request.body  # raw bytes from QZ Tray
+    to_sign = request.body  # raw bytes sent by QZ Tray
     key_path = os.path.join(CERTS_DIR, "private-key.pem")
-    try:
-        with open(key_path, "rb") as f:
-            private_key = serialization.load_pem_private_key(f.read(), password=None)
-    except FileNotFoundError:
+
+    if not os.path.exists(key_path):
         return HttpResponse("Private key not found", status=404)
 
-    signature = private_key.sign(to_sign, padding.PKCS1v15(), hashes.SHA1())
-    return HttpResponse(base64.b64encode(signature).decode("ascii"), content_type="text/plain")
+    # ── Strategy 1: cryptography package ────────────────────────────────────
+    try:
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
+
+        with open(key_path, "rb") as f:
+            private_key = serialization.load_pem_private_key(f.read(), password=None)
+
+        sig = private_key.sign(to_sign, asym_padding.PKCS1v15(), hashes.SHA1())
+        return HttpResponse(base64.b64encode(sig).decode("ascii"), content_type="text/plain")
+
+    except ImportError:
+        pass  # fall through to openssl
+
+    # ── Strategy 2: openssl subprocess (always available on Debian/Alpine) ──
+    import subprocess
+    import tempfile
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as tmp:
+            tmp.write(to_sign)
+            tmp_path = tmp.name
+
+        result = subprocess.run(
+            ["openssl", "dgst", "-sha1", "-sign", key_path, "-out", "-", tmp_path],
+            capture_output=True,
+        )
+        os.unlink(tmp_path)
+
+        if result.returncode != 0:
+            return HttpResponse(
+                "openssl error: " + result.stderr.decode(), status=500
+            )
+        return HttpResponse(
+            base64.b64encode(result.stdout).decode("ascii"),
+            content_type="text/plain",
+        )
+
+    except FileNotFoundError:
+        return HttpResponse("Neither cryptography nor openssl is available", status=500)
 
 
 def search_order_view(request):
@@ -144,3 +181,99 @@ def process_volumes_view(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+def process_import_batch_thread(batch_id, file_paths):
+    batch = ImportBatch.objects.get(id=batch_id)
+    erros = []
+    
+    for path, filename in file_paths:
+        try:
+            with open(path, 'rb') as f:
+                pedido_data = ExcelReader.ler(f)
+                
+            if not pedido_data.get("itens"):
+                erros.append(f"{filename}: Nenhum item encontrado.")
+            else:
+                DatabaseService.salvar_pedido_completo(pedido_data)
+                
+            batch.processed_files += 1
+            batch.save(update_fields=['processed_files'])
+            
+        except Exception as e:
+            erros.append(f"{filename}: {str(e)}")
+            batch.processed_files += 1
+            batch.save(update_fields=['processed_files'])
+        finally:
+            # Clean up temp file
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except:
+                    pass
+                    
+    batch.status = 'completed' if not erros else 'error'
+    if erros:
+        batch.errors = json.dumps(erros)
+    batch.save(update_fields=['status', 'errors'])
+
+
+def upload_excel_view(request):
+    if request.method == "POST":
+        excel_files = request.FILES.getlist("excel_files")
+        if not excel_files:
+            return JsonResponse({"error": "Nenhum arquivo de planilha foi enviado."}, status=400)
+            
+        # Create temp files safely
+        fs = FileSystemStorage(location=os.path.join(settings.BASE_DIR, 'tmp', 'uploads'))
+        
+        file_paths = []
+        for f in excel_files:
+            try:
+                # save returns the actual name, append to paths
+                saved_name = fs.save(f.name, f)
+                full_path = fs.path(saved_name)
+                file_paths.append((full_path, f.name))
+            except Exception as e:
+                pass
+                
+        if not file_paths:
+            return JsonResponse({"error": "Falha ao alocar os arquivos temporários no servidor."}, status=500)
+            
+        batch = ImportBatch.objects.create(
+            total_files=len(file_paths),
+            processed_files=0,
+            status='processing'
+        )
+        
+        # Inicia a Thread
+        thread = threading.Thread(target=process_import_batch_thread, args=(batch.id, file_paths))
+        thread.start()
+        
+        return JsonResponse({"success": True, "batch_id": batch.id})
+        
+    recent_batches = ImportBatch.objects.order_by('-created_at')[:10]
+    recent_pedidos = Pedido.objects.order_by('-criado_em')[:10]
+    return render(request, "ticket_printer/upload_excel.html", {
+        "recent_batches": recent_batches,
+        "recent_pedidos": recent_pedidos
+    })
+
+
+def check_import_progress(request):
+    batch_id = request.GET.get('batch_id')
+    if not batch_id:
+        return JsonResponse({"error": "batch_id não fornecido"}, status=400)
+        
+    try:
+        batch = ImportBatch.objects.get(id=batch_id)
+        errors = json.loads(batch.errors) if batch.errors else []
+        
+        return JsonResponse({
+            "status": batch.status,
+            "processed": batch.processed_files,
+            "total": batch.total_files,
+            "errors": errors
+        })
+    except ImportBatch.DoesNotExist:
+        return JsonResponse({"error": "Batch não encontrado"}, status=404)

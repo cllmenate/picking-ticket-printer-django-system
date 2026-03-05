@@ -67,3 +67,17 @@ class VolumeItem(models.Model):
 
     def __str__(self):
         return f"{self.quantidade}x {self.item.codigo_produto} no Volume {self.volume.volume_num}"
+
+
+class ImportBatch(models.Model):
+    total_files = models.IntegerField(default=0)
+    processed_files = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, default='processing') # processing, completed, error
+    errors = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "import_batches"
+        
+    def __str__(self):
+        return f"Lote {self.id} - {self.status} ({self.processed_files}/{self.total_files})"

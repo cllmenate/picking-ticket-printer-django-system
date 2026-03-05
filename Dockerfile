@@ -12,9 +12,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Install system dependencies required by psycopg2
+# Install system dependencies required by psycopg2 and certificate signing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
+    openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # ─── Dependencies stage ──────────────────────────────────────────────────────

@@ -39,7 +39,13 @@ Thumbs.db
 __pycache__
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 
 # QZ Tray certificates – sensitive, never commit
 certs/digital-certificate.txt
 certs/private-key.pem
+
+# Miscellaneous root scripts
+tmp_fix.py
+main.py
+tmp/

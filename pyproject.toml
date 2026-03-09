@@ -1,6 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "core",
+    "apps",
+    "ticket_printer",
+]
+
 [project]
 name = "picking-ticket-printer-django-system"
-version = "0.1.0"
+version = "1.0.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -13,4 +24,135 @@ dependencies = [
     "pandas>=3.0.1",
     "openpyxl>=3.1.5",
     "xlrd>=2.0.2",
+    "celery[redis]>=5.4.0",
+    "redis>=5.0.0",
+    "django-cors-headers>=4.3.0",
+    "djangorestframework>=3.15.2",
+    "djangorestframework-simplejwt>=5.3.1",
+    "drf-spectacular>=0.27.2",
+    "sentry-sdk[django]>=2.5.1",
+    "weasyprint>=61.0",
+    "pdfplumber>=0.11.9",
+    "python-docx>=1.2.0",
+    "django-tailwind>=4.4.2",
+    "django-unfold>=0.83.1",
+    "cookiecutter>=2.7.1",
+]
+
+# Dependências de Desenvolvimento (instaladas com uv sync --dev)
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-django>=4.8.0",
+    "pytest-cov>=4.1.0",
+    "pytest-env>=1.1.3",
+    "time-machine>=2.13.0",
+    "factory-boy>=3.3.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.6.0",
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.1",
+    "pymdown-extensions>=10.20",
+    "mypy>=1.19.1",
+    "django-stubs>=5.2.9",
+    "djangorestframework-stubs>=3.16.8",
+    "pytest-factoryboy>=2.8.1",
+]
+
+# ========================================================
+# CONFIGURAÇÃO DO RUFF (Linter & Formatter)
+# ========================================================
+[tool.ruff]
+# Comprimento da linha (compatível com Black)
+line-length = 79
+# Versão alvo do Python
+target-version = "py313"
+
+[tool.ruff.format]
+# Habilita funcionalidades estendidas de indentação e
+# quebra de linha em fase "preview".
+# Isso quebra strings excessivamente longas e
+# ajusta melhor a indentação para evitar que E501 seja ativado.
+preview = true
+# Garante que docstrings tamém sejam formatadas e
+# fiquem dentro do limite de 79 caracteres.
+docstring-code-format = true
+docstring-code-line-length = 79
+
+
+[tool.ruff.lint]
+# Habilita regras:
+# E: pycodestyle errors
+# F: Pyflakes
+# I: isort (ordenação de imports)
+# B: flake8-bugbear (bugs comuns)
+# UP: pyupgrade (modernização de sintaxe)
+select = ["E", "F", "I", "B", "UP"]
+ignore = []
+
+# Configurações específicas para Django
+[tool.ruff.lint.isort]
+known-first-party = ["app", "config"] # Suas pastas locais
+
+# Ignorar regras específicas em arquivos de migração (são autogerados)
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/*.py" = ["E501"] # Ignora linha muito longa em migrações
+
+# ========================================================
+# CONFIGURAÇÃO DO MYPY (Static Type Checker)
+# ========================================================
+[tool.mypy]
+python_version = "3.13"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+
+# Rigor na checagem
+check_untyped_defs = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+# Ignorar pastas de migrações e testes na checagem estrita
+exclude = [
+    "^manage\\.py$",
+    "migrations",
+    "tests"
+]
+
+[tool.django-stubs]
+django_settings_module = "core.settings"
+
+# ========================================================
+# CONFIGURAÇÃO DO PYTEST
+# ========================================================
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "core.settings"
+python_files = ["test_*.py", "*_tests.py", "tests.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+testpaths = ["tests"]
+
+# Coverage and Runtime options
+addopts = "--reuse-db --nomigrations --strict-markers --tb=short --cov=apps --cov-report=term-missing"
+
+# Environment variables for testing (Requires pytest-env)
+env = [
+    "DATABASE_URL=sqlite:///:memory:",  # Force SQLite in memory for tests
+]
+
+# Custom markers
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "api: API endpoint tests",
+    "signals: Signal handler tests",
+    "slow: Tests that run slowly",
+]
+
+# Output
+console_output_style = "progress"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
 ]

@@ -1,0 +1,130 @@
+services:
+  # ─── Redis Message Broker ────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"  # Exposed for local dev introspection (e.g., RedisInsight)
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+
+  # ─── PostgreSQL Database ─────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    ports:
+      - "5432:5432"  # Exposed for local dev introspection (e.g., DBeaver)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ─── Tailwind CSS Watch (Development) ───────────────────────────────────────
+  tailwind:
+    image: node:22-alpine
+    working_dir: /app/theme/static_src
+    command: sh -c "npm ci && npm run dev"
+    volumes:
+      # Mount entire app so Tailwind can watch both source and templates
+      - ../../:/app
+    networks:
+      - frontend
+
+  # ─── Django / Uvicorn (Development) ──────────────────────────────────────
+  web:
+    build:
+      context: ../../
+      dockerfile: docker/django/Dockerfile
+      target: runtime
+      args:
+        INSTALL_DEV: "true"
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DJANGO_ENV=development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      tailwind:
+        condition: service_started
+    volumes:
+      # Mount local code for live-reload
+      - ../../:/app
+      # Override the mounted .venv with the container's built .venv using an anonymous volume
+      - /app/.venv
+      - static_volume:/staticfiles
+      - media_volume:/media
+      - ../../certs:/app/certs:ro
+    ports:
+      - "8000:8000" # Expose 8000 for direct API testing bypassing nginx if needed
+    networks:
+      - backend
+      - frontend
+
+  # ─── Celery Worker (Development) ─────────────────────────────────────────
+  worker:
+    build:
+      context: ../../
+      dockerfile: docker/django/Dockerfile
+      target: runtime
+      args:
+        INSTALL_DEV: "true"
+    restart: unless-stopped
+    command: watchfiles "celery -A core worker -l info --concurrency=2" .
+    env_file:
+      - ../../.env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DJANGO_ENV=development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ../../:/app
+      - /app/.venv
+      - media_volume:/media
+    networks:
+      - backend
+
+  # ─── Nginx Reverse Proxy (Development) ───────────────────────────────────
+  nginx:
+    build:
+      context: ../../
+      dockerfile: docker/nginx/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - static_volume:/staticfiles:ro
+      - media_volume:/media:ro
+    depends_on:
+      - web
+    networks:
+      - frontend
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
+
+networks:
+  backend:
+  frontend:

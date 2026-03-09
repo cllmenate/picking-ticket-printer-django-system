@@ -1,0 +1,207 @@
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
+
+from django.db import transaction
+from django.utils.timezone import make_aware
+
+from apps.addresses.models import Address
+from apps.customers.models import Customer
+from apps.deliveries.models import Delivery
+from apps.orders.models import Order, OrderItem
+from apps.products.models import Product
+
+
+def _parse_date(date_str: str | None) -> datetime | None:
+    if not date_str:
+        return None
+    date_str = str(date_str).strip()
+
+    # Excel OLE date serial (e.g. "46078.4375") — xlrd/pandas gives raw floats
+    try:
+        serial = float(date_str)
+        # Excel serials are always > 1 (day 1 = 1900-01-01) and < 2958466 (9999-12-31)
+        if 1.0 < serial < 2958466.0:
+            import xlrd
+
+            dt = xlrd.xldate_as_datetime(serial, 0)  # datemode=0 (1900-based)
+            return make_aware(dt)
+    except (ValueError, OverflowError):
+        pass
+
+    formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%d/%m/%Y - %H:%M",
+        "%d/%m/%Y %H:%M",
+        "%d/%m/%Y",
+        "%Y-%m-%dT%H:%M:%S",
+    ]
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            return make_aware(dt)
+        except ValueError:
+            pass
+    return None
+
+
+def _parse_decimal(val) -> Decimal | None:
+    if val is None or val == "":
+        return None
+    try:
+        # Note: file_processor already parses to Decimal for products,
+        # but string extracted properties might need parsing here if we
+        # didn't parse them yet.
+        if isinstance(val, Decimal):
+            return val
+        s = (
+            str(val).replace(".", "").replace(",", ".")
+            if "," in str(val) and "." in str(val)
+            else str(val).replace(",", ".")
+        )
+        return Decimal(s)
+    except Exception:
+        return None
+
+
+class DatabaseImporter:
+    @staticmethod
+    def save_complete_order(order_data: dict[str, Any]) -> Order:
+        with transaction.atomic():
+            order_number = order_data.get("order_number", "")
+            picking = order_data.get("picking", "")
+            id_number = order_data.get("id_number", "")
+
+            # Create or get Address
+            address, _ = Address.objects.get_or_create(
+                street=order_data.get("address_street", ""),
+                number=order_data.get("address_number", ""),
+                district=order_data.get("address_district", ""),
+                city=order_data.get("address_city", ""),
+                state=order_data.get("address_state", ""),
+                zip_code=order_data.get("address_zip_code", ""),
+                defaults={
+                    "country": "Brasil",
+                    "complement": order_data.get("customer_reference") or "",
+                },
+            )
+            if order_data.get("customer_reference"):
+                address.complement = order_data.get("customer_reference", "")
+                address.save()
+
+            # Create or get Customer
+            customer_code = order_data.get("customer_code", "")
+            customer, _ = Customer.objects.get_or_create(
+                id_number=id_number,
+                defaults={
+                    "code": customer_code,
+                    "name": order_data.get("customer_name", ""),
+                    "address": address,
+                    "phone": order_data.get("phone", ""),
+                },
+            )
+            if order_data.get("phone"):
+                customer.phone = order_data.get("phone", "")
+                customer.save()
+
+            # Handle delivery
+            delivery = None
+            if order_data.get("manifest") or order_data.get("carrier"):
+                delivery, _ = Delivery.objects.get_or_create(
+                    manifest=order_data.get("manifest", ""),
+                    carrier=order_data.get("carrier", ""),
+                    defaults={
+                        "delivery": order_data.get("delivery", ""),
+                        "route": order_data.get("route", ""),
+                        "vehicle": order_data.get("vehicle", ""),
+                        "driver": order_data.get("driver", ""),
+                        "helper": order_data.get("helper", ""),
+                    },
+                )
+
+            order = Order.objects.filter(
+                order_number=order_number, picking=picking
+            ).first()
+
+            if order:
+                # Reset previous items for re-importing
+                OrderItem.objects.filter(order=order).delete()
+
+                order.order_route = order_data.get("route", "")
+                order.customer = customer
+                order.delivery = delivery
+                order.total_volumes = order_data.get("total_volumes", None)
+                order.status = "pending"
+                order.situation = order_data.get("situation") or ""
+                order.typing_date = _parse_date(order_data.get("typing_date"))
+                order.release_date = _parse_date(
+                    order_data.get("release_date")
+                )
+                order.pre_invoice_date = _parse_date(
+                    order_data.get("pre_invoice_date")
+                )
+                order.invoice_number = order_data.get("invoice_number") or ""
+                order.scheduled_date = order_data.get("scheduled_date") or ""
+                order.condition = order_data.get("condition") or ""
+                order.operation = order_data.get("operation") or ""
+                order.origin = order_data.get("origin") or ""
+                order.typist = order_data.get("typist") or ""
+                order.salesperson = order_data.get("salesperson") or ""
+                order.releaser = order_data.get("releaser") or ""
+                order.pending_payment = order_data.get("pending_payment") or ""
+                order.net_weight = _parse_decimal(order_data.get("net_weight"))
+
+                order.save()
+            else:
+                order = Order.objects.create(
+                    picking=picking,
+                    order_number=order_number,
+                    order_route=order_data.get("route", ""),
+                    customer=customer,
+                    delivery=delivery,
+                    total_volumes=order_data.get("total_volumes", None),
+                    status="pending",
+                    situation=order_data.get("situation") or "",
+                    typing_date=_parse_date(order_data.get("typing_date")),
+                    release_date=_parse_date(order_data.get("release_date")),
+                    pre_invoice_date=_parse_date(
+                        order_data.get("pre_invoice_date")
+                    ),
+                    invoice_number=order_data.get("invoice_number") or "",
+                    scheduled_date=order_data.get("scheduled_date") or "",
+                    condition=order_data.get("condition") or "",
+                    operation=order_data.get("operation") or "",
+                    origin=order_data.get("origin") or "",
+                    typist=order_data.get("typist") or "",
+                    salesperson=order_data.get("salesperson") or "",
+                    releaser=order_data.get("releaser") or "",
+                    pending_payment=order_data.get("pending_payment") or "",
+                    net_weight=_parse_decimal(order_data.get("net_weight")),
+                )
+
+            products_data = order_data.get("products", [])
+            for product_data in products_data:
+                sku_code = product_data.get("product_code", "")
+                description = product_data.get("description", "")
+                price = _parse_decimal(product_data.get("price")) or Decimal(
+                    "0.00"
+                )
+
+                product, _ = Product.objects.get_or_create(
+                    sku_code=sku_code,
+                    defaults={
+                        "description": description,
+                        "price": price,
+                    },
+                )
+                if product.price != price and price > 0:
+                    product.price = price
+                    product.save()
+
+                OrderItem.objects.create(
+                    order=order,
+                    product=product,
+                    quantity=product_data.get("quantity", Decimal("0")),
+                )
+
+            return order

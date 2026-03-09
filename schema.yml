@@ -1,0 +1,316 @@
+openapi: 3.0.3
+info:
+  title: Picking Ticket Printer API
+  version: 1.0.0
+  description: API for Managing Logistics Orders and Label Printing
+paths:
+  /api/token/:
+    post:
+      operationId: api_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/token/refresh/:
+    post:
+      operationId: api_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /imports/api/v1/imports/progress/:
+    get:
+      operationId: imports_api_v1_imports_progress_retrieve
+      description: Consulta o status atual do processamento de um lote de importação
+        ZPL e do banco de dados em plano de fundo via Celery.
+      parameters:
+      - in: query
+        name: batch_id
+        schema:
+          type: integer
+        description: ID do lote de importação sendo processado pelo Celery.
+        required: true
+      tags:
+      - imports
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportProgressResponse'
+          description: ''
+  /orders/api/v1/orders/{numero_pedido}/:
+    get:
+      operationId: orders_api_v1_orders_retrieve
+      description: Generic API View (DRF) para consultas REST de pedidos.
+      parameters:
+      - in: path
+        name: numero_pedido
+        schema:
+          type: string
+        required: true
+      tags:
+      - orders
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pedido'
+          description: ''
+  /volumes/api/v1/volumes/process/:
+    post:
+      operationId: volumes_api_v1_volumes_process_create
+      description: Processa um pedido e gera rótulos (ZPL) com base no número total
+        de volumes especificado.
+      tags:
+      - volumes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessVolumesRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProcessVolumesRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProcessVolumesRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessVolumesResponse'
+          description: ''
+components:
+  schemas:
+    ImportProgressResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: 'O status atual: ''processing'', ''completed'' ou ''error'''
+        processed:
+          type: integer
+          description: Número de planilhas processadas
+        total:
+          type: integer
+          description: Número total de planilhas
+        errors:
+          type: array
+          items:
+            type: string
+          description: A lista de erros parseados caso haja falha em alguma planilha.
+      required:
+      - errors
+      - processed
+      - status
+      - total
+    Pedido:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/PedidoItem'
+          readOnly: true
+        picking:
+          type: string
+          maxLength: 20
+        numero_pedido:
+          type: string
+          maxLength: 30
+        rota:
+          type: string
+          nullable: true
+          maxLength: 50
+        cliente_codigo:
+          type: string
+          nullable: true
+          maxLength: 30
+        cliente_nome:
+          type: string
+          nullable: true
+        cpf_cnpj:
+          type: string
+          nullable: true
+          maxLength: 20
+        endereco_logradouro:
+          type: string
+          nullable: true
+        endereco_numero:
+          type: string
+          nullable: true
+        endereco_bairro:
+          type: string
+          nullable: true
+        endereco_cidade:
+          type: string
+          nullable: true
+        endereco_uf:
+          type: string
+          nullable: true
+          maxLength: 2
+        endereco_cep:
+          type: string
+          nullable: true
+          maxLength: 15
+        criado_em:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - criado_em
+      - id
+      - itens
+      - numero_pedido
+      - picking
+    PedidoItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        codigo_produto:
+          type: string
+          nullable: true
+          maxLength: 50
+        descricao:
+          type: string
+          nullable: true
+        quantidade:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        unidade:
+          type: string
+          nullable: true
+          maxLength: 20
+        linha_origem:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+        pedido:
+          type: integer
+      required:
+      - id
+      - pedido
+    ProcessVolumesRequest:
+      type: object
+      properties:
+        numero_pedido:
+          type: string
+          description: O número do pedido ou número de picking usado na busca.
+        total_volumes:
+          type: integer
+          minimum: 1
+          default: 1
+          description: A quantidade total de volumes que serão gerados.
+      required:
+      - numero_pedido
+    ProcessVolumesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        zpl_commands:
+          type: array
+          items:
+            type: string
+          description: Lista de códigos ZPL renderizados para a impressora.
+      required:
+      - success
+      - zpl_commands
+    TokenObtainPair:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - password
+      - refresh
+      - username
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - refresh
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

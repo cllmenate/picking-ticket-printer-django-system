@@ -1,0 +1,740 @@
+{% extends 'base.html' %}
+
+{% block header %}
+<nav class="bg-slate-800 text-white flex items-center justify-between px-6 h-[52px] sticky top-0 z-50 shadow-md">
+    <div class="text-base font-bold tracking-tight flex items-center gap-2">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8M12 17v4" />
+        </svg>
+        Expedição de Pickings
+    </div>
+    <div class="flex items-center gap-2 text-[13px]">
+        <div class="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-full px-3 py-1 font-medium">
+            <span class="w-2 h-2 rounded-full bg-green-400"></span>
+            <span id="count-confirmed">{{ total_confirmed }}</span>&nbsp;confirmados
+        </div>
+        <div class="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-full px-3 py-1 font-medium">
+            <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
+            <span id="count-pending">{{ total_pending }}</span>&nbsp;pendentes
+        </div>
+        <div class="w-px h-5 bg-white/20 mx-1"></div>
+        <a href="{% url 'upload-import' %}"
+           class="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-full px-3 py-1 font-medium hover:bg-white/20 transition-colors no-underline text-white">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Ingestão
+        </a>
+        <a href="/docs/" title="Documentação do Projeto"
+           class="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-full px-3 py-1 font-medium hover:bg-white/20 transition-colors no-underline text-white">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+            Docs
+        </a>
+        <a href="/admin/" title="Django Admin"
+           class="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-full px-3 py-1 font-medium hover:bg-amber-500/80 transition-colors no-underline text-white">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Admin
+        </a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-[14px] shadow-sm overflow-hidden border border-slate-200">
+
+    <div class="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-200 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-base font-semibold text-slate-800">Pickings Aguardando Expedição</span>
+            <div class="flex items-center gap-1.5 ml-1 flex-wrap">
+                {% for label, value, active_css, inactive_css in status_pills %}
+                <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if value %}status={{ value }}&{% endif %}sort={{ sort_field }}&dir={{ sort_dir }}"
+                   class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-all
+                   {% if status_filter == value %}{{ active_css }}{% else %}{{ inactive_css }}{% endif %}">
+                   {{ label }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        <form class="flex items-center gap-2" method="GET" action="">
+            {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
+            {% if sort_field %}<input type="hidden" name="sort" value="{{ sort_field }}" />{% endif %}
+            {% if sort_dir %}<input type="hidden" name="dir" value="{{ sort_dir }}" />{% endif %}
+            <input
+                class="border border-slate-200 rounded-lg text-sm px-3 py-2 w-60 outline-none transition-all focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+                type="text" name="q" value="{{ search_query|default:'' }}"
+                placeholder="Buscar picking, pedido ou cliente…" autocomplete="off" />
+            <button type="submit"
+                class="inline-flex items-center gap-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold px-4 py-2 hover:bg-blue-700 transition-colors active:scale-95">
+                Buscar
+            </button>
+            {% if search_query or status_filter %}
+            <a href="?" class="inline-flex items-center gap-1 text-slate-400 hover:text-slate-600 text-sm px-2 py-2 rounded-lg hover:bg-slate-100 transition-colors" title="Limpar filtros">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    {% csrf_token %}
+
+    <div class="overflow-x-auto w-full">
+        <table class="w-full border-collapse">
+            <thead>
+                <tr class="bg-slate-50 border-b-2 border-slate-200">
+                    <th class="py-2.5 px-4 text-[11px] font-bold tracking-wider uppercase text-slate-500 text-center w-11">
+                        <input type="checkbox" id="select-all" title="Selecionar todos confirmados" class="w-[17px] h-[17px] accent-blue-600 cursor-pointer" />
+                    </th>
+                    {% for col_label, col_key in sortable_columns %}
+                    <th class="py-2.5 px-4 text-[11px] font-bold tracking-wider uppercase text-slate-500 text-left whitespace-nowrap{% if col_key == 'status' %} w-[140px]{% endif %}">
+                        <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}sort={{ col_key }}&dir={% if sort_field == col_key and sort_dir == 'asc' %}desc{% else %}asc{% endif %}"
+                           class="inline-flex items-center gap-1 text-slate-500 no-underline hover:text-slate-800 transition-colors group">
+                            <span>{{ col_label }}</span>
+                            <span class="text-slate-300 group-hover:text-slate-500 transition-colors">
+                                {% if sort_field == col_key %}{% if sort_dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}⇅{% endif %}
+                            </span>
+                        </a>
+                    </th>
+                    {% endfor %}
+                    <th class="py-2.5 px-4 text-[11px] font-bold tracking-wider uppercase text-amber-500 text-left whitespace-nowrap w-[220px]">
+                        VOLUME <span class="text-[10px] tracking-wide opacity-80">(CONFIRME PARA IMPRIMIR)</span>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="orders-tbody">
+                {% for order in orders %}
+                <tr id="row-{{ order.pk }}" data-order-id="{{ order.pk }}" data-status="{{ order.status }}"
+                    class="hover:bg-slate-50 transition-colors border-b border-slate-200 last:border-0 group"
+                    style="cursor:pointer"
+                    onclick="openDetailModal({{ order.pk }}, event)">
+
+                    <td class="text-center w-11 align-middle" onclick="event.stopPropagation()">
+                        {% if order.status == STATUS_SHIPPED %}
+                        <input type="checkbox" class="row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-not-allowed opacity-40" id="chk-{{ order.pk }}" data-order-id="{{ order.pk }}" disabled title="Já expedido" />
+                        {% elif order.status == STATUS_CONFIRMED %}
+                        <input type="checkbox" class="row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-pointer" id="chk-{{ order.pk }}" data-order-id="{{ order.pk }}" />
+                        {% elif order.status == STATUS_FAILED %}
+                        <input type="checkbox" class="row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-not-allowed opacity-40" id="chk-{{ order.pk }}" data-order-id="{{ order.pk }}" disabled title="Pedido com falha — confirme novamente" />
+                        {% elif order.status == STATUS_IN_PROGRESS %}
+                        <input type="checkbox" class="row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-not-allowed opacity-40" id="chk-{{ order.pk }}" data-order-id="{{ order.pk }}" disabled title="Impressão em andamento" />
+                        {% else %}
+                        <input type="checkbox" class="row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-not-allowed opacity-40" id="chk-{{ order.pk }}" data-order-id="{{ order.pk }}" disabled title="Confirme o volume primeiro" />
+                        {% endif %}
+                    </td>
+
+                    <td class="py-3 px-4 text-sm font-bold align-middle">{{ order.picking }}</td>
+                    <td class="py-3 px-4 text-sm align-middle">{{ order.order_number }}</td>
+
+                    <td class="py-3 px-4 text-sm align-middle">
+                        {% if order.customer %}
+                        <span class="text-slate-500 text-[13px]">{{ order.customer.id_number|default:"" }} – </span>
+                        {{ order.customer.name|truncatechars:32 }}
+                        {% else %}—{% endif %}
+                    </td>
+
+                    <td class="py-3 px-4 align-middle">
+                        <div id="badge-{{ order.pk }}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap
+                            {% if order.status == STATUS_PENDING %}bg-amber-50 text-amber-800 border border-amber-300
+                            {% elif order.status == STATUS_CONFIRMED %}bg-green-50 text-green-800 border border-green-300
+                            {% elif order.status == STATUS_SHIPPED %}bg-blue-50 text-blue-800 border border-blue-200
+                            {% elif order.status == STATUS_IN_PROGRESS %}bg-purple-50 text-purple-800 border border-purple-200
+                            {% elif order.status == STATUS_FAILED %}bg-red-50 text-red-800 border border-red-300
+                            {% else %}bg-slate-100 text-slate-800 border border-slate-200{% endif %}">
+                            {% if order.status == STATUS_PENDING %}⏳ Aguardando
+                            {% elif order.status == STATUS_CONFIRMED %}✓ Confirmado
+                            {% elif order.status == STATUS_SHIPPED %}📦 Expedido
+                            {% elif order.status == STATUS_IN_PROGRESS %}🔄 Em Progresso
+                            {% elif order.status == STATUS_FAILED %}⚠ Falha
+                            {% else %}{{ order.get_status_display }}{% endif %}
+                        </div>
+                    </td>
+
+                    <td class="py-3 px-4 align-middle" onclick="event.stopPropagation()">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-500 font-semibold">Qtd.</span>
+                            {% if order.status == STATUS_SHIPPED or order.status == STATUS_IN_PROGRESS %}
+                            <input type="number" class="w-16 px-2 py-1.5 border border-slate-200 rounded-md text-sm text-center outline-none bg-slate-50 text-slate-400 cursor-not-allowed" id="vol-{{ order.pk }}" min="1" value="{{ order.total_volumes|default:1 }}" disabled />
+                            {% else %}
+                            <input type="number" class="w-16 px-2 py-1.5 border border-slate-200 rounded-md text-sm text-center outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-500/15" id="vol-{{ order.pk }}" min="1" value="{{ order.total_volumes|default:1 }}" />
+                            {% endif %}
+
+                            {% if order.status == STATUS_SHIPPED %}
+                            <button class="bg-green-600 text-white border-0 rounded-md text-[13px] font-semibold px-3 py-1.5 cursor-not-allowed whitespace-nowrap opacity-75" id="btn-confirm-{{ order.pk }}" disabled>✓ Confirmado</button>
+                            {% elif order.status == STATUS_IN_PROGRESS %}
+                            <button class="bg-purple-600 text-white border-0 rounded-md text-[13px] font-semibold px-3 py-1.5 cursor-not-allowed whitespace-nowrap opacity-75" id="btn-confirm-{{ order.pk }}" disabled>🔄 Imprimindo…</button>
+                            {% elif order.status == STATUS_CONFIRMED %}
+                            <button class="bg-green-600 hover:bg-green-700 text-white border-0 rounded-md text-[13px] font-semibold px-3 py-1.5 cursor-pointer transition-colors active:scale-95 whitespace-nowrap" id="btn-confirm-{{ order.pk }}" onclick="confirmVolumes({{ order.pk }})">✓ Confirmado</button>
+                            {% elif order.status == STATUS_FAILED %}
+                            <button class="bg-amber-500 hover:bg-amber-600 text-white border-0 rounded-md text-[13px] font-semibold px-3 py-1.5 cursor-pointer transition-colors active:scale-95 whitespace-nowrap" id="btn-confirm-{{ order.pk }}" onclick="confirmVolumes({{ order.pk }})">↺ Reconfirmar</button>
+                            {% else %}
+                            <button class="bg-amber-500 hover:bg-amber-600 text-white border-0 rounded-md text-[13px] font-semibold px-3 py-1.5 cursor-pointer transition-colors active:scale-95 whitespace-nowrap" id="btn-confirm-{{ order.pk }}" onclick="confirmVolumes({{ order.pk }})">Confirmar</button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="text-center py-14 px-4 text-slate-500">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="opacity-30 block mx-auto mb-4">
+                                <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+                                <rect x="9" y="3" width="6" height="4" rx="1" />
+                            </svg>
+                            <p class="text-[15px] max-w-sm mx-auto">Nenhum pedido aguardando expedição no momento.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="flex items-center justify-between px-6 py-3 border-t border-slate-200 bg-slate-50/50 flex-wrap gap-3">
+        <span class="text-xs text-slate-500">
+            Mostrando
+            <strong class="text-slate-700">{{ page_obj.start_index }}</strong>–<strong class="text-slate-700">{{ page_obj.end_index }}</strong>
+            de <strong class="text-slate-700">{{ paginator.count }}</strong> pedido(s)
+        </span>
+        {% if paginator.num_pages > 1 %}
+        <nav class="flex items-center gap-1" aria-label="Paginação">
+            {% if page_obj.has_previous %}
+            <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}sort={{ sort_field }}&dir={{ sort_dir }}&page=1"
+               class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors no-underline">«</a>
+            <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}sort={{ sort_field }}&dir={{ sort_dir }}&page={{ page_obj.previous_page_number }}"
+               class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors no-underline">‹</a>
+            {% else %}
+            <span class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 cursor-not-allowed">«</span>
+            <span class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 cursor-not-allowed">‹</span>
+            {% endif %}
+            {% for num in page_obj.paginator.page_range %}
+                {% if num == page_obj.number %}
+                <span class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white">{{ num }}</span>
+                {% elif num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
+                <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}sort={{ sort_field }}&dir={{ sort_dir }}&page={{ num }}"
+                   class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors no-underline">{{ num }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if page_obj.has_next %}
+            <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}sort={{ sort_field }}&dir={{ sort_dir }}&page={{ page_obj.next_page_number }}"
+               class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors no-underline">›</a>
+            <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}sort={{ sort_field }}&dir={{ sort_dir }}&page={{ paginator.num_pages }}"
+               class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors no-underline">»</a>
+            {% else %}
+            <span class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 cursor-not-allowed">›</span>
+            <span class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 cursor-not-allowed">»</span>
+            {% endif %}
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+<div id="float-bar" style="display:none;position:fixed;bottom:1.5rem;left:50%;
+     align-items:center;gap:1rem;
+     background:#0f172a;color:#fff;border-radius:1rem;padding:.75rem 1.5rem;
+     box-shadow:0 20px 60px rgba(0,0,0,.35);
+     transition:opacity .25s ease,transform .25s ease;
+     opacity:0;transform:translateX(-50%) translateY(1rem);pointer-events:none;z-index:40;">
+    <div style="display:flex;align-items:center;gap:.5rem;font-size:.875rem">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span id="selected-count" style="font-weight:700">0</span>
+        <span style="color:#94a3b8">pedido(s) selecionado(s)</span>
+    </div>
+    <div style="width:1px;height:1.25rem;background:rgba(255,255,255,.2)"></div>
+    <button id="btn-print" onclick="printSelected()"
+            style="display:inline-flex;align-items:center;gap:.5rem;background:#22c55e;color:#fff;
+                   border:0;border-radius:.75rem;font-size:.875rem;font-weight:600;
+                   padding:.5rem 1rem;cursor:pointer;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="6 9 6 2 18 2 18 9"/>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <rect x="6" y="14" width="12" height="8"/>
+        </svg>
+        Imprimir Selecionados
+    </button>
+    <button onclick="deselectAll()" title="Desmarcar todos"
+            style="background:transparent;border:0;color:#94a3b8;cursor:pointer;padding:.25rem;border-radius:.5rem">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+    </button>
+</div>
+
+<div id="detail-modal"
+     style="display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:1rem;
+            opacity:0;transition:opacity .2s ease;">
+    <div id="modal-backdrop" onclick="closeDetailModal()"
+         style="position:absolute;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)"></div>
+    <div id="modal-panel"
+         style="position:relative;background:#fff;border-radius:1rem;
+                box-shadow:0 25px 80px rgba(0,0,0,.2);
+                width:100%;max-width:42rem;max-height:90vh;overflow-y:auto;z-index:10;
+                transform:translateY(1rem);transition:transform .2s ease;">
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:1rem 1.5rem;border-bottom:1px solid #e2e8f0;
+                    position:sticky;top:0;background:#fff;z-index:10;border-radius:1rem 1rem 0 0">
+            <div>
+                <h2 style="font-size:1rem;font-weight:700;color:#1e293b;margin:0" id="modal-title">Detalhes do Pedido</h2>
+                <p style="font-size:.75rem;color:#64748b;margin:.25rem 0 0" id="modal-subtitle"></p>
+            </div>
+            <button onclick="closeDetailModal()"
+                    style="background:transparent;border:0;padding:.375rem;border-radius:.5rem;cursor:pointer;color:#64748b">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M18 6 6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div id="modal-body" style="padding:1.25rem 1.5rem">
+            <div style="text-align:center;padding:2.5rem 0;color:#94a3b8">Carregando…</div>
+        </div>
+    </div>
+</div>
+
+<div id="toast" style="display:none;position:fixed;bottom:1.5rem;right:1.5rem;
+     min-width:260px;max-width:380px;padding:.75rem 1rem;border-radius:.75rem;
+     font-size:.875rem;font-weight:500;box-shadow:0 10px 40px rgba(0,0,0,.15);z-index:60"></div>
+
+<style>
+@keyframes slideUp {
+    from { opacity:0; transform:translateY(12px); }
+    to   { opacity:1; transform:translateY(0); }
+}
+th a { text-decoration:none; }
+#btn-print:hover { background:#16a34a !important; }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.min.js"></script>
+<script>
+const CSRF_TOKEN = document.querySelector("[name=csrfmiddlewaretoken]").value;
+const PRINTER_NAME = "TSC TTP-244CE";
+
+// ── Toast ────────────────────────────────────
+let _toastTimer;
+function showToast(msg, type) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    const styles = {
+        success: "background:#dcfce7;color:#14532d;border:1px solid #86efac",
+        error:   "background:#fee2e2;color:#7f1d1d;border:1px solid #fca5a5",
+        info:    "background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe",
+        warning: "background:#fffbeb;color:#92400e;border:1px solid #fcd34d",
+    };
+    el.style.cssText = "display:block;position:fixed;bottom:1.5rem;right:1.5rem;" +
+        "min-width:260px;max-width:380px;padding:.75rem 1rem;border-radius:.75rem;" +
+        "font-size:.875rem;font-weight:500;box-shadow:0 10px 40px rgba(0,0,0,.15);" +
+        "z-index:60;animation:slideUp .2s ease-out;" + (styles[type] || styles.info);
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { el.style.display = "none"; }, 5000);
+}
+
+// ── Floating bar ──────────────────────────────
+const floatBar = document.getElementById("float-bar");
+
+function showFloatBar() {
+    floatBar.style.display = "flex";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        floatBar.style.opacity = "1";
+        floatBar.style.transform = "translateX(-50%) translateY(0)";
+        floatBar.style.pointerEvents = "auto";
+    }));
+}
+
+function hideFloatBar() {
+    floatBar.style.opacity = "0";
+    floatBar.style.transform = "translateX(-50%) translateY(1rem)";
+    floatBar.style.pointerEvents = "none";
+    setTimeout(() => { floatBar.style.display = "none"; }, 260);
+}
+
+document.getElementById("select-all").addEventListener("change", function () {
+    document.querySelectorAll(".row-checkbox:not(:disabled)").forEach(cb => { cb.checked = this.checked; });
+    updateSelectionUI();
+});
+
+document.addEventListener("change", e => {
+    if (e.target.classList.contains("row-checkbox")) updateSelectionUI();
+});
+
+function updateSelectionUI() {
+    const count = document.querySelectorAll(".row-checkbox:checked").length;
+    document.getElementById("selected-count").textContent = count;
+    if (count > 0) showFloatBar(); else hideFloatBar();
+}
+
+function deselectAll() {
+    document.querySelectorAll(".row-checkbox:checked").forEach(cb => { cb.checked = false; });
+    document.getElementById("select-all").checked = false;
+    updateSelectionUI();
+}
+
+function getSelectedOrders() {
+    return Array.from(document.querySelectorAll(".row-checkbox:checked")).map(cb => {
+        const id = parseInt(cb.dataset.orderId);
+        return { order_id: id, total_volumes: parseInt(document.getElementById("vol-" + id).value) };
+    });
+}
+
+// ── helpers DOM ───────────────────────────────
+function setOrderUI(orderId, status) {
+    const badge = document.getElementById("badge-" + orderId);
+    const chk   = document.getElementById("chk-" + orderId);
+    const btn   = document.getElementById("btn-confirm-" + orderId);
+    const vol   = document.getElementById("vol-" + orderId);
+    const row   = document.getElementById("row-" + orderId);
+    if (row) row.dataset.status = status;
+
+    const badgeMap = {
+        in_progress: { cls: "bg-purple-50 text-purple-800 border border-purple-200", label: "🔄 Em Progresso" },
+        shipped:     { cls: "bg-blue-50 text-blue-800 border border-blue-200",       label: "📦 Expedido" },
+        failed:      { cls: "bg-red-50 text-red-800 border border-red-300",           label: "⚠ Falha" },
+        confirmed:   { cls: "bg-green-50 text-green-800 border border-green-300",    label: "✓ Confirmado" },
+    };
+    if (badge && badgeMap[status]) {
+        badge.className = "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap " + badgeMap[status].cls;
+        badge.textContent = badgeMap[status].label;
+    }
+
+    if (!chk || !btn || !vol) return;
+
+    if (status === "shipped") {
+        chk.disabled = true; chk.className = "row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-not-allowed opacity-40";
+        btn.disabled = true; btn.textContent = "✓ Confirmado"; btn.className = "bg-green-600 text-white border-0 rounded-md text-[13px] font-semibold px-3 py-1.5 cursor-not-allowed whitespace-nowrap opacity-75";
+        vol.disabled = true; vol.className = "w-16 px-2 py-1.5 border border-slate-200 rounded-md text-sm text-center outline-none bg-slate-50 text-slate-400 cursor-not-allowed";
+    } else if (status === "in_progress") {
+        chk.disabled = true; chk.className = "row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-not-allowed opacity-40";
+        btn.disabled = true; btn.textContent = "🔄 Imprimindo…"; btn.className = "bg-purple-600 text-white border-0 rounded-md text-[13px] font-semibold px-3 py-1.5 cursor-not-allowed whitespace-nowrap opacity-75";
+        vol.disabled = true; vol.className = "w-16 px-2 py-1.5 border border-slate-200 rounded-md text-sm text-center outline-none bg-slate-50 text-slate-400 cursor-not-allowed";
+    } else if (status === "failed") {
+        chk.disabled = true; chk.className = "row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-not-allowed opacity-40";
+        btn.disabled = false; btn.textContent = "↺ Reconfirmar"; btn.className = "bg-amber-500 hover:bg-amber-600 text-white border-0 rounded-md text-[13px] font-semibold px-3 py-1.5 cursor-pointer transition-colors active:scale-95 whitespace-nowrap";
+        btn.setAttribute("onclick", "confirmVolumes(" + orderId + ")");
+        vol.disabled = false; vol.className = "w-16 px-2 py-1.5 border border-slate-200 rounded-md text-sm text-center outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-500/15";
+    }
+}
+
+// ── Confirm volumes ───────────────────────────
+async function confirmVolumes(orderId) {
+    const volInput   = document.getElementById("vol-" + orderId);
+    const btnConfirm = document.getElementById("btn-confirm-" + orderId);
+    const totalVolumes = parseInt(volInput.value);
+
+    if (!totalVolumes || totalVolumes < 1) {
+        showToast("Informe uma quantidade de volumes válida (mínimo 1).", "error");
+        return;
+    }
+    btnConfirm.disabled = true;
+    btnConfirm.textContent = "…";
+
+    try {
+        const resp = await fetch("/orders/api/v1/orders/" + orderId + "/confirm-volumes/", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
+            body: JSON.stringify({ total_volumes: totalVolumes }),
+        });
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+            // Habilitar checkbox e corrigir todos os estilos
+            const chk = document.getElementById("chk-" + orderId);
+            chk.disabled = false;
+            chk.className = "row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-pointer";
+            chk.style.opacity = "";
+            chk.title = "";
+
+            const badge = document.getElementById("badge-" + orderId);
+            badge.className = "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap bg-green-50 text-green-800 border border-green-300";
+            badge.textContent = "✓ Confirmado";
+
+            btnConfirm.className = "bg-green-600 hover:bg-green-700 text-white border-0 rounded-md text-[13px] font-semibold px-3 py-1.5 cursor-pointer transition-colors active:scale-95 whitespace-nowrap";
+            btnConfirm.textContent = "✓ Confirmado";
+            btnConfirm.disabled = false;
+            btnConfirm.setAttribute("onclick", "confirmVolumes(" + orderId + ")");
+
+            document.getElementById("row-" + orderId).dataset.status = "confirmed";
+            refreshCounters();
+            showToast("Pedido confirmado com " + totalVolumes + " volume(s).", "success");
+        } else {
+            showToast("Erro ao confirmar: " + (data.error || JSON.stringify(data)), "error");
+            btnConfirm.disabled = false;
+            btnConfirm.textContent = "Confirmar";
+        }
+    } catch (err) {
+        showToast("Erro de rede ao confirmar volumes.", "error");
+        console.error(err);
+        btnConfirm.disabled = false;
+        btnConfirm.textContent = "Confirmar";
+    }
+}
+
+// ── Refresh counters ──────────────────────────
+async function refreshCounters() {
+    try {
+        const [r1, r2] = await Promise.all([
+            fetch("/orders/api/v1/orders/?status=confirmed"),
+            fetch("/orders/api/v1/orders/?status=pending"),
+        ]);
+        if (r1.ok) { const d = await r1.json(); document.getElementById("count-confirmed").textContent = d.count ?? d.length; }
+        if (r2.ok) { const d = await r2.json(); document.getElementById("count-pending").textContent  = d.count ?? d.length; }
+    } catch (_) {}
+}
+
+// ── QZ Tray ───────────────────────────────────
+const QZ_CONNECT_TIMEOUT_MS = 5000;
+
+async function initQZ() {
+    if (qz.websocket.isActive()) return true;
+    showToast("Conectando ao QZ Tray…", "info");
+    try {
+        qz.security.setCertificatePromise((resolve, reject) =>
+            fetch("/printer/qz/certificate/").then(r => r.text()).then(resolve).catch(reject));
+        qz.security.setSignaturePromise(toSign => (resolve, reject) =>
+            fetch("/printer/qz/sign/", { method: "POST", body: toSign, headers: { "Content-Type": "text/plain" } })
+                .then(r => r.text()).then(resolve).catch(reject));
+
+        // Race QZ connect against a hard timeout
+        await Promise.race([
+            qz.websocket.connect(),
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("QZ Tray connection timed out after " + (QZ_CONNECT_TIMEOUT_MS/1000) + "s")), QZ_CONNECT_TIMEOUT_MS)
+            ),
+        ]);
+        return true;
+    } catch (err) {
+        showToast("QZ Tray não disponível: " + err.message, "error");
+        console.error("initQZ:", err);
+        return false;
+    }
+}
+
+// ── Print flow (confirm-shipped / mark-failed) ─
+async function notifyPrintResult(orderIds, success) {
+    const endpoint = success ? "confirm-shipped" : "mark-failed";
+    return Promise.all(orderIds.map(id =>
+        fetch("/orders/api/v1/orders/" + id + "/" + endpoint + "/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
+        }).catch(err => console.error("Falha ao notificar status para pedido", id, err))
+    ));
+}
+
+async function printSelected() {
+    const orders = getSelectedOrders();
+    if (orders.length === 0) { showToast("Selecione ao menos um pedido.", "error"); return; }
+
+    const confirmMsg =
+        "Confirmar impressão de " + orders.length + " pedido(s)?\n\n" +
+        "Certifique-se de que a impressora está ligada e o QZ Tray está ativo.";
+    if (!window.confirm(confirmMsg)) return;
+
+    const btnPrint = document.getElementById("btn-print");
+    btnPrint.disabled = true;
+    btnPrint.textContent = "⏳ Processando…";
+
+    // Declare processedIds in outer scope so catch/finally can always reach it
+    let processedIds = [];
+
+    try {
+        // 1. Gerar ZPL e marcar como in_progress (servidor)
+        const resp = await fetch("/orders/api/v1/volumes/process/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
+            body: JSON.stringify({ orders }),
+        });
+        const data = await resp.json();
+
+        if (!resp.ok || !data.success) {
+            showToast("Erro ao processar: " + (data.error || "Desconhecido"), "error");
+            console.error(data);
+            return; // processedIds still empty — nothing to mark
+        }
+
+        if (data.errors?.length > 0) {
+            showToast("Atenção: " + data.errors.length + " pedido(s) com erro.", "warning");
+            console.warn("Erros de processamento:", data.errors);
+        }
+
+        // IDs que o servidor processou com sucesso (sem erro individual)
+        processedIds = orders
+            .filter(o => !data.errors?.find(e => e.order_id === o.order_id))
+            .map(o => o.order_id);
+
+        // Atualizar UI para in_progress imediatamente
+        processedIds.forEach(id => setOrderUI(id, "in_progress"));
+
+        // 2. Conectar QZ Tray (com timeout de 5s)
+        const connected = await initQZ();
+        if (!connected) {
+            await notifyPrintResult(processedIds, false);
+            processedIds.forEach(id => setOrderUI(id, "failed"));
+            showToast("Impressão cancelada — pedidos marcados como Falha. Reconfirme para tentar novamente.", "error");
+            return;
+        }
+
+        // 3. Enviar para a impressora
+        const config = qz.configs.create(PRINTER_NAME);
+        showToast("Enviando para a impressora…", "info");
+        await qz.print(config, data.zpl_commands);
+
+        // 3a. Sucesso — confirm-shipped
+        await notifyPrintResult(processedIds, true);
+        processedIds.forEach(id => setOrderUI(id, "shipped"));
+        processedIds = []; // limpar para o finally não re-processar
+        deselectAll();
+        refreshCounters();
+        showToast(data.zpl_commands.length + " etiqueta(s) impressa(s) com sucesso!", "success");
+
+    } catch (err) {
+        // Qualquer erro não tratado — marcar como failed se ainda in_progress
+        console.error("Erro no fluxo de impressão:", err);
+        if (processedIds.length > 0) {
+            await notifyPrintResult(processedIds, false).catch(() => {});
+            processedIds.forEach(id => setOrderUI(id, "failed"));
+            showToast("Erro na impressão. Pedidos marcados como Falha — tente novamente.", "error");
+        } else {
+            showToast("Erro de rede ao processar pedidos.", "error");
+        }
+    } finally {
+        btnPrint.disabled = false;
+        btnPrint.textContent = "🖨 Imprimir Selecionados";
+        updateSelectionUI();
+    }
+}
+
+// ── Modal de Detalhe ──────────────────────────
+const detailModal = document.getElementById("detail-modal");
+const modalPanel  = document.getElementById("modal-panel");
+
+function openDetailModal(orderId, event) {
+    if (event && event.target.closest("input, button, a, label")) return;
+    document.getElementById("modal-body").innerHTML =
+        '<div style="text-align:center;padding:2.5rem 0;color:#94a3b8">Carregando…</div>';
+
+    detailModal.style.display = "flex";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        detailModal.style.opacity = "1";
+        modalPanel.style.transform = "translateY(0)";
+    }));
+    document.body.style.overflow = "hidden";
+
+    fetch("/orders/api/v1/orders/detail/" + orderId + "/")
+        .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        .then(data => renderModalContent(data))
+        .catch(err => {
+            document.getElementById("modal-body").innerHTML =
+                '<div style="text-align:center;padding:2.5rem 0;color:#ef4444">Erro ao carregar dados.<br><small>' + err.message + '</small></div>';
+        });
+}
+
+function closeDetailModal() {
+    detailModal.style.opacity = "0";
+    modalPanel.style.transform = "translateY(1rem)";
+    document.body.style.overflow = "";
+    setTimeout(() => { detailModal.style.display = "none"; }, 220);
+}
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDetailModal(); });
+
+// ── Modal render helpers ──────────────────────
+const _STATUS_STYLE = {
+    pending:     { bg:"#fef9c3", color:"#78350f", border:"#fde047", label:"⏳ Aguardando" },
+    confirmed:   { bg:"#dcfce7", color:"#14532d", border:"#86efac", label:"✓ Confirmado" },
+    shipped:     { bg:"#dbeafe", color:"#1e3a8a", border:"#93c5fd", label:"📦 Expedido" },
+    in_progress: { bg:"#ede9fe", color:"#4c1d95", border:"#c4b5fd", label:"🔄 Em Progresso" },
+    failed:      { bg:"#fee2e2", color:"#7f1d1d", border:"#fca5a5", label:"⚠ Falha" },
+};
+
+function statusBadgeHtml(status) {
+    const s = _STATUS_STYLE[status] || { bg:"#f1f5f9", color:"#334155", border:"#cbd5e1", label: status };
+    return `<span style="display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:9999px;font-size:.75rem;font-weight:600;background:${s.bg};color:${s.color};border:1px solid ${s.border}">${s.label}</span>`;
+}
+
+function fmtDate(val) {
+    if (!val) return "—";
+    try { return new Date(val).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }); }
+    catch { return val; }
+}
+
+function mRow(label, value) {
+    const v = (value !== null && value !== undefined && String(value).trim()) ? String(value) : "—";
+    return `<div style="display:flex;gap:.75rem;padding:.35rem 0;border-bottom:1px solid #f1f5f9">
+        <span style="font-size:.75rem;font-weight:600;color:#64748b;width:8.5rem;flex-shrink:0">${label}</span>
+        <span style="font-size:.875rem;color:#1e293b;flex:1">${v}</span>
+    </div>`;
+}
+
+function mSection(title, rows) {
+    return `<div style="margin-bottom:1.25rem">
+        <h3 style="font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:0 0 .5rem">${title}</h3>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.75rem;padding:.75rem 1rem">${rows}</div>
+    </div>`;
+}
+
+function renderModalContent(d) {
+    document.getElementById("modal-title").textContent = "Picking " + d.picking + " — Pedido " + d.order_number;
+    document.getElementById("modal-subtitle").innerHTML = statusBadgeHtml(d.status);
+
+    const addr = d.customer?.address;
+    const endereco = addr
+        ? [addr.street, addr.number, addr.complement, addr.district,
+           addr.city + " - " + addr.state, addr.zip_code].filter(Boolean).join(", ")
+        : "—";
+
+    // Tabela de itens — usa os campos corretos do Product (description, sku_code)
+    let itemsHtml;
+    if (d.items?.length > 0) {
+        itemsHtml = `<div style="overflow-x:auto;border-radius:.5rem;border:1px solid #e2e8f0">
+            <table style="width:100%;border-collapse:collapse;font-size:.875rem">
+                <thead><tr style="background:#f8fafc">
+                    <th style="padding:.5rem .75rem;text-align:left;font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Descrição</th>
+                    <th style="padding:.5rem .75rem;text-align:left;font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b">SKU</th>
+                    <th style="padding:.5rem .75rem;text-align:right;font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Qtd.</th>
+                </tr></thead>
+                <tbody>
+                    ${d.items.map((it, i) => `<tr style="${i%2?"background:#f8fafc":""}">
+                        <td style="padding:.5rem .75rem;color:#1e293b">${it.product_description || "—"}</td>
+                        <td style="padding:.5rem .75rem;color:#64748b;font-size:.75rem">${it.product_sku || "—"}</td>
+                        <td style="padding:.5rem .75rem;text-align:right;font-weight:600">${it.quantity}</td>
+                    </tr>`).join("")}
+                </tbody>
+            </table></div>`;
+    } else {
+        itemsHtml = '<p style="font-size:.875rem;color:#94a3b8;font-style:italic">Nenhum item registrado.</p>';
+    }
+
+    document.getElementById("modal-body").innerHTML =
+        mSection("Picking & Pedido", [
+            mRow("Picking", d.picking), mRow("Nº Pedido", d.order_number),
+            mRow("Rota", d.order_route), mRow("NF", d.invoice_number),
+            mRow("Data Programada", d.scheduled_date), mRow("Situação", d.situation),
+            mRow("Pendência", d.pending_payment), mRow("Operação", d.operation),
+            mRow("Origem", d.origin), mRow("Condição", d.condition),
+            mRow("Total de Volumes", d.total_volumes),
+            mRow("Peso Líquido", d.net_weight ? d.net_weight + " kg" : null),
+        ].join("")) +
+        mSection("Pessoas", [
+            mRow("Vendedor", d.salesperson), mRow("Digitador", d.typist),
+            mRow("Liberador", d.releaser), mRow("Digitação em", fmtDate(d.typing_date)),
+            mRow("Liberação em", fmtDate(d.release_date)), mRow("Pré-Nota em", fmtDate(d.pre_invoice_date)),
+        ].join("")) +
+        (d.customer ? mSection("Cliente", [
+            mRow("Nome", d.customer.name), mRow("Código", d.customer.code),
+            mRow("CNPJ/CPF", d.customer.id_number), mRow("Telefone", d.customer.phone),
+            mRow("Endereço", endereco),
+        ].join("")) : "") +
+        `<div style="margin-bottom:1.25rem">
+            <h3 style="font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:0 0 .5rem">Itens do Pedido</h3>
+            ${itemsHtml}
+        </div>` +
+        `<p style="font-size:.75rem;color:#94a3b8;text-align:right;margin:0">Criado em ${fmtDate(d.created_at)} · Atualizado em ${fmtDate(d.updated_at)}</p>`;
+}
+</script>
+{% endblock %}

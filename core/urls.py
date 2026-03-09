@@ -16,9 +16,41 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import include, path
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", include("ticket_printer.urls")),
+    # Auth
+    path(
+        "api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"
+    ),
+    path(
+        "api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"
+    ),
+    # Schema
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "api/schema/swagger-ui/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path(
+        "api/schema/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="redoc",
+    ),
+    # App Routers
+    path("", include("apps.orders.urls")),
+    path("orders/", include("apps.orders.urls")),
+    path("imports/", include("apps.imports.urls")),
+    path("printer/", include("apps.ticket_printer.urls")),
 ]

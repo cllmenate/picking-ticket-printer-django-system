@@ -1,0 +1,23 @@
+{% load static tailwind_tags %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Picking Ticket Printer{% endblock %}</title>
+    {% tailwind_css %}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50 text-slate-800 font-sans min-h-screen antialiased">
+    {% block header %}{% endblock %}
+    
+    <main class="container mx-auto px-4 py-6 max-w-7xl">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

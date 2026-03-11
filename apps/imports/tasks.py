@@ -29,9 +29,9 @@ def process_single_file(path, filename, errors):
     except IntegrityError as e:
         logger.exception("IntegrityError processing %s", filename)
         errors.append(f"{filename}: Database integrity error ({e}).")
-    except Exception:
+    except Exception as e:
         logger.exception("Unexpected error processing %s", filename)
-        errors.append(f"{filename}: Unexpected failure during processing.")
+        errors.append(f"{filename}: Unexpected failure: {str(e)}")
     finally:
         if os.path.exists(path):
             try:

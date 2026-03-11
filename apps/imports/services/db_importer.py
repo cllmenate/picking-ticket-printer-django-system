@@ -72,8 +72,8 @@ class DatabaseImporter:
             picking = order_data.get("picking", "")
             id_number = order_data.get("id_number", "")
 
-            # Create or get Address
-            address, _ = Address.objects.get_or_create(
+            # Create or get Address (thread-safe update_or_create)
+            address, _ = Address.objects.update_or_create(
                 street=order_data.get("address_street", ""),
                 number=order_data.get("address_number", ""),
                 district=order_data.get("address_district", ""),
@@ -85,13 +85,10 @@ class DatabaseImporter:
                     "complement": order_data.get("customer_reference") or "",
                 },
             )
-            if order_data.get("customer_reference"):
-                address.complement = order_data.get("customer_reference", "")
-                address.save()
 
-            # Create or get Customer
+            # Create or get Customer (thread-safe update_or_create)
             customer_code = order_data.get("customer_code", "")
-            customer, _ = Customer.objects.get_or_create(
+            customer, _ = Customer.objects.update_or_create(
                 id_number=id_number,
                 defaults={
                     "code": customer_code,
@@ -100,14 +97,11 @@ class DatabaseImporter:
                     "phone": order_data.get("phone", ""),
                 },
             )
-            if order_data.get("phone"):
-                customer.phone = order_data.get("phone", "")
-                customer.save()
 
-            # Handle delivery
+            # Handle delivery (thread-safe update_or_create)
             delivery = None
             if order_data.get("manifest") or order_data.get("carrier"):
-                delivery, _ = Delivery.objects.get_or_create(
+                delivery, _ = Delivery.objects.update_or_create(
                     manifest=order_data.get("manifest", ""),
                     carrier=order_data.get("carrier", ""),
                     defaults={
@@ -119,84 +113,53 @@ class DatabaseImporter:
                     },
                 )
 
-            order = Order.objects.filter(
-                order_number=order_number, picking=picking
-            ).first()
+            # Create or update Order (thread-safe update_or_create)
+            order, _ = Order.objects.update_or_create(
+                order_number=order_number, 
+                picking=picking,
+                defaults={
+                    "order_route": order_data.get("route", ""),
+                    "customer": customer,
+                    "delivery": delivery,
+                    "total_volumes": order_data.get("total_volumes", None),
+                    "status": "pending",
+                    "situation": order_data.get("situation") or "",
+                    "typing_date": _parse_date(order_data.get("typing_date")),
+                    "release_date": _parse_date(order_data.get("release_date")),
+                    "pre_invoice_date": _parse_date(order_data.get("pre_invoice_date")),
+                    "invoice_number": order_data.get("invoice_number") or "",
+                    "scheduled_date": order_data.get("scheduled_date") or "",
+                    "condition": order_data.get("condition") or "",
+                    "operation": order_data.get("operation") or "",
+                    "origin": order_data.get("origin") or "",
+                    "typist": order_data.get("typist") or "",
+                    "salesperson": order_data.get("salesperson") or "",
+                    "releaser": order_data.get("releaser") or "",
+                    "pending_payment": order_data.get("pending_payment") or "",
+                    "net_weight": _parse_decimal(order_data.get("net_weight")),
+                }
+            )
 
-            if order:
-                # Reset previous items for re-importing
-                OrderItem.objects.filter(order=order).delete()
-
-                order.order_route = order_data.get("route", "")
-                order.customer = customer
-                order.delivery = delivery
-                order.total_volumes = order_data.get("total_volumes", None)
-                order.status = "pending"
-                order.situation = order_data.get("situation") or ""
-                order.typing_date = _parse_date(order_data.get("typing_date"))
-                order.release_date = _parse_date(
-                    order_data.get("release_date")
-                )
-                order.pre_invoice_date = _parse_date(
-                    order_data.get("pre_invoice_date")
-                )
-                order.invoice_number = order_data.get("invoice_number") or ""
-                order.scheduled_date = order_data.get("scheduled_date") or ""
-                order.condition = order_data.get("condition") or ""
-                order.operation = order_data.get("operation") or ""
-                order.origin = order_data.get("origin") or ""
-                order.typist = order_data.get("typist") or ""
-                order.salesperson = order_data.get("salesperson") or ""
-                order.releaser = order_data.get("releaser") or ""
-                order.pending_payment = order_data.get("pending_payment") or ""
-                order.net_weight = _parse_decimal(order_data.get("net_weight"))
-
-                order.save()
-            else:
-                order = Order.objects.create(
-                    picking=picking,
-                    order_number=order_number,
-                    order_route=order_data.get("route", ""),
-                    customer=customer,
-                    delivery=delivery,
-                    total_volumes=order_data.get("total_volumes", None),
-                    status="pending",
-                    situation=order_data.get("situation") or "",
-                    typing_date=_parse_date(order_data.get("typing_date")),
-                    release_date=_parse_date(order_data.get("release_date")),
-                    pre_invoice_date=_parse_date(
-                        order_data.get("pre_invoice_date")
-                    ),
-                    invoice_number=order_data.get("invoice_number") or "",
-                    scheduled_date=order_data.get("scheduled_date") or "",
-                    condition=order_data.get("condition") or "",
-                    operation=order_data.get("operation") or "",
-                    origin=order_data.get("origin") or "",
-                    typist=order_data.get("typist") or "",
-                    salesperson=order_data.get("salesperson") or "",
-                    releaser=order_data.get("releaser") or "",
-                    pending_payment=order_data.get("pending_payment") or "",
-                    net_weight=_parse_decimal(order_data.get("net_weight")),
-                )
+            # Reset previous items for re-importing
+            OrderItem.objects.filter(order=order).delete()
 
             products_data = order_data.get("products", [])
             for product_data in products_data:
-                sku_code = product_data.get("product_code", "")
+                sku_code = str(product_data.get("product_code", "")).strip()
                 description = product_data.get("description", "")
-                price = _parse_decimal(product_data.get("price")) or Decimal(
-                    "0.00"
-                )
+                price = _parse_decimal(product_data.get("price")) or Decimal("0.00")
 
-                product, _ = Product.objects.get_or_create(
+                if not sku_code:
+                    continue
+
+                # Create or update Product (thread-safe update_or_create)
+                product, _ = Product.objects.update_or_create(
                     sku_code=sku_code,
                     defaults={
                         "description": description,
-                        "price": price,
+                        "price": price if price > 0 else 0,
                     },
                 )
-                if product.price != price and price > 0:
-                    product.price = price
-                    product.save()
 
                 OrderItem.objects.create(
                     order=order,

@@ -294,24 +294,38 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         var ctx = document.getElementById('ordersChart').getContext('2d');
-        var isDarkMode = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
-        var textColor = isDarkMode ? '#9ca3af' : '#4b5563';
-        var gridColor = isDarkMode ? '#374151' : '#e5e7eb';
 
-        new Chart(ctx, {
+        function isDark() {
+            return document.documentElement.classList.contains('dark') ||
+                document.body.classList.contains('dark');
+        }
+
+        function getChartColors() {
+            var dark = isDark();
+            return {
+                tickColor: dark ? '#9ca3af' : '#6b7280',
+                gridColor: dark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)'
+            };
+        }
+
+        var colors = getChartColors();
+
+        var chart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: {{ chart_labels| safe }},
         datasets: [{
             label: 'Pedidos',
             data: {{ chart_data| safe }},
-        borderColor: '#0284c7', // Using a default Tailwind blueish primary
+        borderColor: '#0284c7',
         backgroundColor: 'rgba(2, 132, 199, 0.1)',
         borderWidth: 2,
         fill: true,
-        tension: 0.3
-                    }]
-                },
+        tension: 0.3,
+        pointRadius: 3,
+        pointHoverRadius: 5
+                }]
+            },
         options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -321,16 +335,26 @@
         scales: {
             y: {
                 beginAtZero: true,
-                ticks: { color: textColor, stepSize: 1 },
-                grid: { color: gridColor }
+                ticks: { color: colors.tickColor, stepSize: 1, font: { size: 11 } },
+                grid: { color: colors.gridColor, drawBorder: false }
             },
             x: {
-                ticks: { color: textColor },
+                ticks: { color: colors.tickColor, font: { size: 11 } },
                 grid: { display: false }
             }
         }
     }
-            });
         });
+
+    // React to light ↔ dark mode switches in real time
+    var observer = new MutationObserver(function () {
+        var c = getChartColors();
+        chart.options.scales.y.ticks.color = c.tickColor;
+        chart.options.scales.y.grid.color = c.gridColor;
+        chart.options.scales.x.ticks.color = c.tickColor;
+        chart.update('none');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    });
 </script>
 {% endblock %}

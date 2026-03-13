@@ -11,7 +11,7 @@ packages = [
 
 [project]
 name = "picking-ticket-printer-django-system"
-version = "1.0.0"
+version = "2.0.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -37,6 +37,7 @@ dependencies = [
     "django-tailwind>=4.4.2",
     "django-unfold>=0.83.1",
     "cookiecutter>=2.7.1",
+    "django-redis>=6.0.0",
 ]
 
 # Dependências de Desenvolvimento (instaladas com uv sync --dev)

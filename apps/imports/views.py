@@ -2,10 +2,15 @@ import json
 import os
 
 from django.conf import settings
+from django.contrib.auth.mixins import (
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+)
 from django.core.files.storage import FileSystemStorage
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views import View
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -15,8 +20,13 @@ from .models import ImportBatch
 from .tasks import process_import_batch_task
 
 
-class UploadImportView(View):
+class UploadImportView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    View,
+):
     template_name = "upload_import.html"
+    permission_required = "imports.add_import_batch"
 
     def get(self, request, *args, **kwargs):
         recent_batches = ImportBatch.objects.order_by("-created_at")[:10]
@@ -65,8 +75,17 @@ class UploadImportView(View):
         return JsonResponse({"success": True, "batch_id": batch.id})
 
 
-class ImportProgressAPIView(APIView):
+class ImportProgressAPIView(
+    APIView,
+):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, *args, **kwargs):
+        if not request.user.has_perm("imports.view_import_batch"):
+            return Response(
+                {"error": "Você não tem permissão para ver isso."}, status=403
+            )
+
         batch_id = request.query_params.get("batch_id")
         if not batch_id:
             return Response({"error": "batch_id não fornecido"}, status=400)

@@ -13,7 +13,9 @@ CERTS_DIR = os.path.join(settings.BASE_DIR, "certs")
 TYPE_CONTENT = "text/plain"
 
 
-class QzCertificateView(View):
+class QzCertificateView(
+    View,
+):
     """
     Class-Based View (Django) para servir o certificado QZ Tray.
     """
@@ -27,7 +29,9 @@ class QzCertificateView(View):
             return HttpResponse("", content_type=TYPE_CONTENT, status=404)
 
 
-class QzSignView(View):
+class QzSignView(
+    View,
+):
     """
     Class-Based View para assinatura digital QZ Tray. Post de dados raw.
     """

@@ -1,9 +1,13 @@
+from django.contrib.auth.mixins import (
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+)
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import render
-from django.views import View
+from django.views.generic import DetailView, ListView
 
-from apps.orders.models import Order
+from .models import Order
 
 PAGE_SIZE = 25
 
@@ -16,12 +20,16 @@ VALID_SORT_FIELDS = {
 }
 
 
-class OrdersListView(View):
+class OrdersListView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    ListView,
+):
     """
     View principal da tela de expedição de pickings.
     Suporta busca, filtro por status, ordenação por coluna e paginação.
     """
-
+    permission_required = "orders.view_order"
     template_name = "index.html"
 
     def get(self, request, *args, **kwargs):
@@ -135,3 +143,14 @@ class OrdersListView(View):
             "STATUS_FAILED": S.FAILED.value,
         }
         return render(request, self.template_name, context)
+
+
+class OrderDetailView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    DetailView,
+):
+    model = Order
+    template_name = "order_detail.html"
+    context_object_name = "order"
+    permission_required = "orders.view_order"

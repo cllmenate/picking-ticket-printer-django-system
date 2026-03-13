@@ -1,15 +1,16 @@
-from addresses import views
 from django.urls import path
+
+from .views import AddressDetailView, AddressListView
 
 urlpatterns = [
     path(
         "addresses/list/",
-        views.AddressListView.as_view(),
+        AddressListView.as_view(),
         name="address-list",
     ),
     path(
-        "addresses/detail/<int:pk>/",
-        views.AddressDetailView.as_view(),
+        "addresses/<int:pk>/detail/",
+        AddressDetailView.as_view(),
         name="address-detail",
     ),
 ]

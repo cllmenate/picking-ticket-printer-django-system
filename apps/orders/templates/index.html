@@ -50,6 +50,19 @@
             </svg>
             Admin
         </a>
+        <div class="w-px h-5 bg-white/20 mx-1"></div>
+        <form action="{% url 'logout' %}" method="post" class="inline m-0 p-0">
+            {% csrf_token %}
+            <button type="submit" title="Sair do Sistema"
+                class="flex items-center gap-1.5 bg-red-500/80 border-red-500/30 rounded-full px-3 py-1 font-medium hover:bg-red-600 transition-colors text-white cursor-pointer h-full border-0">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                Sair
+            </button>
+        </form>
     </div>
 </nav>
 {% endblock %}
@@ -59,7 +72,7 @@
 
     <div class="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-200 flex-wrap">
         <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-base font-semibold text-slate-800">Pickings Aguardando Expedição</span>
+            <span class="text-base font-semibold text-slate-800">Pickings Aguardando Expedição {% if user.is_authenticated %}<small class="text-slate-400 font-normal ml-2">({{ user.username }})</small>{% endif %}</span>
             <div class="flex items-center gap-1.5 ml-1 flex-wrap">
                 {% for label, value, active_css, inactive_css in status_pills %}
                 <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if value %}status={{ value }}&{% endif %}sort={{ sort_field }}&dir={{ sort_dir }}"
@@ -128,9 +141,9 @@
                 {% for order in orders %}
                 <tr id="row-{{ order.pk }}" data-order-id="{{ order.pk }}" data-status="{{ order.status }}"
                     class="hover:bg-slate-50 transition-colors border-b border-slate-200 last:border-0 group"
-                    style="cursor:pointer" onclick="openDetailModal({{ order.pk }}, event)">
+                    style="cursor:pointer" onclick="openDetailModal({{ order.pk }}, event)" onkeydown="">
 
-                    <td class="text-center w-11 align-middle" onclick="event.stopPropagation()">
+                    <td class="text-center w-11 align-middle" onclick="event.stopPropagation()" onkeydown="">
                         {% if order.status == STATUS_SHIPPED %}
                         <input type="checkbox"
                             class="row-checkbox w-[17px] h-[17px] accent-blue-600 cursor-not-allowed opacity-40"
@@ -183,7 +196,7 @@
                         </div>
                     </td>
 
-                    <td class="py-3 px-4 align-middle" onclick="event.stopPropagation()">
+                    <td class="py-3 px-4 align-middle" onclick="event.stopPropagation()" onkeydown="">
                         <div class="flex items-center gap-2">
                             <span class="text-xs text-slate-500 font-semibold">Qtd.</span>
                             {% if order.status == STATUS_SHIPPED or order.status == STATUS_IN_PROGRESS %}
@@ -327,7 +340,7 @@
 
 <div id="detail-modal" style="display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:1rem;
             opacity:0;transition:opacity .2s ease;">
-    <div id="modal-backdrop" onclick="closeDetailModal()"
+    <div id="modal-backdrop" onclick="closeDetailModal()" onkeydown=""
         style="position:absolute;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)"></div>
     <div id="modal-panel" style="position:relative;background:#fff;border-radius:1rem;
                 box-shadow:0 25px 80px rgba(0,0,0,.2);
@@ -361,7 +374,7 @@
 <!-- Modal de Configuração de Impressora -->
 <div id="printer-modal"
     style="display:none;position:fixed;inset:0;z-index:100;align-items:center;justify-content:center;padding:1rem;">
-    <div onclick="closePrinterModal()"
+    <div onclick="closePrinterModal()" onkeydown=""
         style="position:absolute;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)"></div>
     <div
         style="position:relative;background:#fff;border-radius:1rem;box-shadow:0 25px 80px rgba(0,0,0,.2);width:100%;max-width:28rem;z-index:10;">
@@ -559,7 +572,7 @@
         btnConfirm.textContent = "…";
 
         try {
-            const resp = await fetch("/orders/api/v1/orders/" + orderId + "/confirm-volumes/", {
+            const resp = await fetch("{% url 'api-confirm-volumes' 0 %}".replace('0', orderId), {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
                 body: JSON.stringify({ total_volumes: totalVolumes }),
@@ -602,8 +615,8 @@
     async function refreshCounters() {
         try {
             const [r1, r2] = await Promise.all([
-                fetch("/orders/api/v1/orders/?status=confirmed"),
-                fetch("/orders/api/v1/orders/?status=pending"),
+                fetch("{% url 'api-orders-list' %}?status=confirmed"),
+                fetch("{% url 'api-orders-list' %}?status=pending"),
             ]);
             if (r1.ok) { const d = await r1.json(); document.getElementById("count-confirmed").textContent = d.count ?? d.length; }
             if (r2.ok) { const d = await r2.json(); document.getElementById("count-pending").textContent = d.count ?? d.length; }
@@ -618,9 +631,9 @@
         showToast("Conectando ao QZ Tray…", "info");
         try {
             qz.security.setCertificatePromise((resolve, reject) =>
-                fetch("/printer/qz/certificate/").then(r => r.text()).then(resolve).catch(reject));
+                fetch("{% url 'qz-certificate' %}").then(r => r.text()).then(resolve).catch(reject));
             qz.security.setSignaturePromise(toSign => (resolve, reject) =>
-                fetch("/printer/qz/sign/", { method: "POST", body: toSign, headers: { "Content-Type": "text/plain" } })
+                fetch("{% url 'qz-sign' %}", { method: "POST", body: toSign, headers: { "Content-Type": "text/plain" } })
                     .then(r => r.text()).then(resolve).catch(reject));
 
             // Race QZ connect against a hard timeout
@@ -640,13 +653,18 @@
 
     // ── Print flow (confirm-shipped / mark-failed) ─
     async function notifyPrintResult(orderIds, success) {
-        const endpoint = success ? "confirm-shipped" : "mark-failed";
-        return Promise.all(orderIds.map(id =>
-            fetch("/orders/api/v1/orders/" + id + "/" + endpoint + "/", {
+        return Promise.all(orderIds.map(id => {
+            let url = "";
+            if (success) {
+                url = "{% url 'api-confirm-shipped' 0 %}".replace('0', id);
+            } else {
+                url = "{% url 'api-mark-failed' 0 %}".replace('0', id);
+            }
+            return fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
-            }).catch(err => console.error("Falha ao notificar status para pedido", id, err))
-        ));
+            }).catch(err => console.error("Falha ao notificar status para pedido", id, err));
+        }));
     }
 
     async function printSelected() {
@@ -667,7 +685,7 @@
 
         try {
             // 1. Gerar ZPL e marcar como in_progress (servidor)
-            const resp = await fetch("/orders/api/v1/volumes/process/", {
+            const resp = await fetch("{% url 'api-process-volumes' %}", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
                 body: JSON.stringify({ orders }),
@@ -744,7 +762,7 @@
 
         try {
             // 1. Gerar ZPL (mesma rota da expedição)
-            const resp = await fetch("/orders/api/v1/volumes/process/", {
+            const resp = await fetch("{% url 'api-process-volumes' %}", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
                 body: JSON.stringify({ orders }),
@@ -768,7 +786,7 @@
 
             // 2. Chamar o conversor no backend
             showToast("Convertendo etiquetas para PDF, aguarde…", "info");
-            const pdfResp = await fetch("/orders/api/v1/volumes/to-pdf/", {
+            const pdfResp = await fetch("{% url 'api-convert-pdf' %}", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
                 body: JSON.stringify({ zpl_commands: data.zpl_commands })
@@ -837,7 +855,7 @@
         }));
         document.body.style.overflow = "hidden";
 
-        fetch("/orders/api/v1/orders/detail/" + orderId + "/")
+        fetch("{% url 'api-order-detail-pk' 0 %}".replace('0', orderId))
             .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
             .then(data => renderModalContent(data))
             .catch(err => {

@@ -1,15 +1,16 @@
-from customers import views
 from django.urls import path
+
+from .views import CustomerDetailView, CustomerListView
 
 urlpatterns = [
     path(
         "customers/list/",
-        views.CustomerListView.as_view(),
+        CustomerListView.as_view(),
         name="customer-list",
     ),
     path(
         "customers/<int:pk>/detail/",
-        views.CustomerDetailView.as_view(),
+        CustomerDetailView.as_view(),
         name="customer-detail",
     ),
 ]

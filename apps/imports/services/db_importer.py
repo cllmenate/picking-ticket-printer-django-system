@@ -149,6 +149,10 @@ class DatabaseImporter:
             OrderItem.objects.filter(order=order).delete()
 
             products_data = order_data.get("products", [])
+            # Sort products by SKU to prevent deadlocks on "produtos" table
+            # when multiple orders share the same products.
+            products_data.sort(key=lambda x: str(x.get("product_code", "")))
+
             for product_data in products_data:
                 sku_code = str(product_data.get("product_code", "")).strip()
                 description = product_data.get("description", "")

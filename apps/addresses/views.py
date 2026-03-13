@@ -1,14 +1,24 @@
-from addresses import models
+from django.contrib.auth.mixins import (
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+)
 from django.core.cache import cache
 from django.views.generic import DetailView, ListView
 
+from .models import Address
+
 
 # Create your views here.
-class AddressListView(ListView):
-    model = models.Address
+class AddressListView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    ListView,
+):
+    model = Address
     template_name = "address_list.html"
     context_object_name = "addresses"
     paginate_by = 10
+    permission_required = "addresses.view_address"
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -31,7 +41,12 @@ class AddressListView(ListView):
         return context
 
 
-class AddressDetailView(DetailView):
-    model = models.Address
+class AddressDetailView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    DetailView,
+):
+    model = Address
     template_name = "address_detail.html"
     context_object_name = "address"
+    permission_required = "addresses.view_address"

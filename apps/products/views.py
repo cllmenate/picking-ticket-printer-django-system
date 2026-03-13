@@ -1,13 +1,23 @@
+from django.contrib.auth.mixins import (
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+)
 from django.core.cache import cache
 from django.views.generic import DetailView, ListView
-from products import models
+
+from .models import Product
 
 
-class ProductListView(ListView):
-    model = models.Product
+class ProductListView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    ListView,
+):
+    model = Product
     template_name = "product_list.html"
     context_object_name = "products"
     paginate_by = 10
+    permission_required = "products.view_product"
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -37,7 +47,12 @@ class ProductListView(ListView):
         return context
 
 
-class ProductDetailView(DetailView):
-    model = models.Product
+class ProductDetailView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    DetailView,
+):
+    model = Product
     template_name = "product_detail.html"
     context_object_name = "product"
+    permission_required = "products.view_product"

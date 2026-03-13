@@ -10,11 +10,16 @@ from .api_views import (
     OrderListAPIView,
     OrderRetrieveAPIView,
 )
-from .views import OrdersListView
+from .views import OrderDetailView, OrdersListView
 
 urlpatterns = [
     # Tela principal de expedição
     path("", OrdersListView.as_view(), name="orders-list"),
+    path(
+        "<int:pk>/",
+        OrderDetailView.as_view(),
+        name="order-detail",
+    ),
     # REST API — listagem e consulta
     path("api/v1/orders/", OrderListAPIView.as_view(), name="api-orders-list"),
     path(

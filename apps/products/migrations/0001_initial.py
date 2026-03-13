@@ -12,17 +12,19 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='ImportBatch',
+            name='Product',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('total_files', models.IntegerField(default=0)),
-                ('processed_files', models.IntegerField(default=0)),
-                ('status', models.CharField(default='processing', max_length=20)),
-                ('errors', models.TextField(blank=True)),
+                ('description', models.CharField(max_length=100)),
+                ('sku_code', models.CharField(max_length=50, unique=True, verbose_name='Código SKU')),
+                ('price', models.DecimalField(decimal_places=2, max_digits=10)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
             ],
             options={
-                'db_table': 'import_batches',
+                'verbose_name': 'Produto',
+                'verbose_name_plural': 'Produtos',
+                'db_table': 'produtos',
             },
         ),
     ]

@@ -39,14 +39,14 @@ if [ "$DJANGO_ENV" = "development" ]; then
   echo "Starting Uvicorn in RELOAD mode (Development)..."
   exec uvicorn core.asgi:application \
     --host 0.0.0.0 \
-    --port 8000 \
+    --port ${PORT:-8000} \
     --reload \
     --log-level ${UVICORN_LOG_LEVEL:-info}
 else
   echo "Starting Uvicorn with multiple workers (Production)..."
   exec uvicorn core.asgi:application \
     --host 0.0.0.0 \
-    --port 8000 \
+    --port ${PORT:-8000} \
     --workers ${UVICORN_WORKERS:-4} \
     --log-level ${UVICORN_LOG_LEVEL:-info}
 fi

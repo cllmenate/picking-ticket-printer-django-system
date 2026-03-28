@@ -1,0 +1,108 @@
+services:
+  # ─── Redis Message Broker ────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Port 6379 NOT exposed externally for security
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+
+  # ─── PostgreSQL Database ─────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    # Port 5432 NOT exposed externally for security
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ─── Django / Uvicorn (Production) ───────────────────────────────────────
+  web:
+    build:
+      context: ../../
+      dockerfile: docker/django/Dockerfile
+      target: runtime
+      args:
+        INSTALL_DEV: "false" # Default is false, being explicit here
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DJANGO_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      # No local source binding! 
+      - static_volume:/staticfiles
+      - media_volume:/media
+      - ../../certs:/app/certs:ro
+    networks:
+      - backend
+      - frontend
+
+  # ─── Celery Worker (Production) ──────────────────────────────────────────
+  worker:
+    build:
+      context: ../../
+      dockerfile: docker/django/Dockerfile
+      target: runtime
+      args:
+        INSTALL_DEV: "false"
+    restart: unless-stopped
+    command: celery -A core worker -l info
+    env_file:
+      - ../../.env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DJANGO_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - media_volume:/media
+    networks:
+      - backend
+
+  # ─── Nginx Reverse Proxy (Production) ────────────────────────────────────
+  nginx:
+    build:
+      context: ../../
+      dockerfile: docker/nginx/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - static_volume:/staticfiles:ro
+      - media_volume:/media:ro
+    depends_on:
+      - web
+    networks:
+      - frontend
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
+
+networks:
+  backend:
+  frontend:

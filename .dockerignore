@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*/.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Virtual environment
+.venv/
+
+# Node.js — prevent node_modules (with symlinks) from entering the build context.
+# npm ci will install them fresh inside the node-builder stage.
+**/node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Local dev files
+.env
+*.log
+tmp/
+*.db
+db.sqlite3
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

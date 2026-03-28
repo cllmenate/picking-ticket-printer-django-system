@@ -1,0 +1,250 @@
+{% extends 'base.html' %}
+
+{% block title %}Upload de Pedido - Expedição e Impressão ZPL{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto w-full">
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-slate-800 m-0">Ingestão de Arquivos</h1>
+        <p class="text-slate-500 mt-2">
+            Faça o upload de múltiplos pedidos (.xls, .xlsx, .pdf, .docx, .doc)
+        </p>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8 mb-8">
+        <!-- Messages will be injected here -->
+        <div id="message-container"></div>
+
+        <form id="upload-form" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="flex flex-col gap-4 mb-4">
+                <label for="import_files" class="font-medium text-slate-800">Selecione os arquivos:</label>
+                <input type="file" name="import_files" id="import_files" accept=".xls,.xlsx,.pdf,.doc,.docx" multiple required 
+                    class="p-3 border border-dashed border-slate-300 rounded-lg text-base outline-none transition-colors bg-slate-50 cursor-pointer focus:border-blue-600 focus:bg-blue-50 hover:border-blue-600 hover:bg-blue-50 w-full" />
+                <button type="submit" id="btn-submit" 
+                    class="bg-blue-600 text-white border-0 px-6 py-3 rounded-lg text-base font-medium cursor-pointer transition-colors hover:bg-blue-700 self-start">
+                    Processar Arquivos
+                </button>
+            </div>
+        </form>
+
+        <div class="hidden mt-6 bg-slate-50 rounded-lg p-6 border border-slate-200" id="progress-container">
+            <h3 class="m-0 mb-2 text-base font-semibold text-slate-800">Processando Ingestão...</h3>
+            <div class="w-full h-3 bg-slate-200 rounded-full overflow-hidden mt-2">
+                <div class="h-full bg-blue-600 w-0 transition-all duration-300 ease-out" id="progress-bar"></div>
+            </div>
+            <div class="text-sm font-medium text-slate-500 mt-2 flex justify-between">
+                <span id="progress-count">0 / 0 planilhas processadas</span>
+                <span id="progress-status" class="font-medium">Iniciando...</span>
+            </div>
+            <div id="progress-errors" class="mt-4 text-red-700 text-sm hidden">
+            </div>
+        </div>
+
+        <div class="mt-8 border-t border-slate-200 pt-4">
+            <a href="{% url 'orders-list' %}" class="text-blue-600 no-underline font-medium mt-4 inline-block hover:underline">
+                &larr; Voltar para Consulta e Impressão
+            </a>
+        </div>
+    </div>
+
+    <!-- Histórico Recente -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8 mt-8">
+        <h3 class="mt-0 mb-6 text-lg font-bold text-slate-800">Últimos Processamentos em Lote</h3>
+        {% if recent_batches %}
+        <div class="overflow-x-auto w-full">
+            <table class="w-full border-collapse text-sm">
+                <thead>
+                    <tr>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">ID Lote</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Data/Hora</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Progresso</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for batch in recent_batches %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-3 px-4 border-b border-slate-200 font-medium text-slate-800 whitespace-nowrap">#{{ batch.id }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ batch.created_at|date:"d/m/Y H:i" }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ batch.processed_files }} / {{ batch.total_files }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 whitespace-nowrap">
+                            {% if batch.status == 'processing' %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Processando</span>
+                            {% elif batch.status == 'completed' %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Concluído</span>
+                            {% else %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Com Erros</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-500 text-sm m-0">Nenhum lote importado recentemente.</p>
+        {% endif %}
+    </div>
+
+    <!-- Pedidos Recentes -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8 mt-8">
+        <h3 class="mt-0 mb-6 text-lg font-bold text-slate-800">Últimos Pedidos Importados</h3>
+        {% if recent_orders %}
+        <div class="overflow-x-auto w-full">
+            <table class="w-full border-collapse text-sm">
+                <thead>
+                    <tr>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Pedido</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Picking</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Cliente</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Data de Importação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in recent_orders %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-3 px-4 border-b border-slate-200 font-medium text-slate-800 whitespace-nowrap">{{ order.order_number }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ order.picking }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ order.customer.name }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ order.created_at|date:"d/m/Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-500 text-sm m-0">Nenhum pedido encontrado no momento.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const form = document.getElementById('upload-form');
+    const btnSubmit = document.getElementById('btn-submit');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+    const progressCount = document.getElementById('progress-count');
+    const progressStatus = document.getElementById('progress-status');
+    const progressErrors = document.getElementById('progress-errors');
+    const messageContainer = document.getElementById('message-container');
+    let pollInterval;
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        // UI Reset
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = 'Enviando...';
+        btnSubmit.classList.add('opacity-75', 'cursor-not-allowed');
+        
+        progressContainer.classList.remove('hidden');
+        progressContainer.classList.add('block');
+        
+        progressBar.style.width = '0%';
+        progressCount.textContent = 'Aguardando início...';
+        progressStatus.textContent = 'Enviando arquivos...';
+        progressErrors.classList.add('hidden');
+        progressErrors.innerHTML = '';
+        messageContainer.innerHTML = '';
+
+        const formData = new FormData(form);
+
+        try {
+            const response = await fetch('{% url "upload-import" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                // Upload iniciado, iniciar polling!
+                form.classList.add('hidden');
+                pollProgress(data.batch_id);
+            } else {
+                showError(data.error || 'Erro desconhecido ao iniciar upload.');
+                resetFormState();
+            }
+        } catch (err) {
+            showError('Erro de rede ao enviar formulário. Tente novamente.');
+            resetFormState();
+        }
+    });
+
+    async function pollProgress(batchId) {
+        pollInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`{% url "api-import-progress" %}?batch_id=${batchId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    const total = data.total;
+                    const processed = data.processed;
+                    const status = data.status;
+                    const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
+
+                    progressBar.style.width = `${percent}%`;
+                    progressCount.textContent = `${processed} / ${total} planilhas processadas`;
+
+                    if (status === 'processing') {
+                        progressStatus.textContent = `Processando... ${percent}%`;
+                        progressStatus.className = 'font-medium text-yellow-700'; // Amarelo
+                        progressBar.className = 'h-full bg-blue-600 transition-all duration-300 ease-out';
+                    } else {
+                        // Concluído ou Erro
+                        clearInterval(pollInterval);
+
+                        if (status === 'completed') {
+                            progressStatus.textContent = 'Concluído com Sucesso!';
+                            progressStatus.className = 'font-medium text-green-700';
+                            progressBar.className = 'h-full bg-green-500 transition-all duration-300 ease-out';
+
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        } else {
+                            progressStatus.textContent = 'Finalizado com Erros';
+                            progressStatus.className = 'font-medium text-red-700';
+                            progressBar.className = 'h-full bg-red-500 transition-all duration-300 ease-out';
+
+                            if (data.errors && data.errors.length > 0) {
+                                progressErrors.classList.remove('hidden');
+                                progressErrors.innerHTML = `<strong>Avisos/Erros:</strong><ul class="mt-2 ml-4 list-disc marker:text-red-500">` +
+                                    data.errors.map(e => `<li>${e}</li>`).join('') +
+                                    `</ul>`;
+                            }
+
+                            form.classList.remove('hidden');
+                            btnSubmit.disabled = false;
+                            btnSubmit.classList.remove('opacity-75', 'cursor-not-allowed');
+                            btnSubmit.textContent = 'Processar Novos Arquivos';
+                        }
+                    }
+                } else {
+                    console.error("Erro no polling: ", data.error);
+                }
+            } catch (err) {
+                console.error("Network error during poll", err);
+            }
+        }, 1000); // 1 segundo de intervalo
+    }
+
+    function showError(msg) {
+        messageContainer.innerHTML = `<div class="mb-4 p-4 rounded-lg bg-red-50 text-red-800 border border-red-200">${msg}</div>`;
+    }
+
+    function resetFormState() {
+        btnSubmit.disabled = false;
+        btnSubmit.classList.remove('opacity-75', 'cursor-not-allowed');
+        btnSubmit.textContent = 'Processar Arquivos';
+        progressContainer.classList.remove('block');
+        progressContainer.classList.add('hidden');
+    }
+</script>
+{% endblock %}

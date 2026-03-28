@@ -1,0 +1,360 @@
+{% extends 'admin/index.html' %}
+
+{% load i18n unfold %}
+
+{% block content %}
+<style>
+    /* ============================================================
+       DARK MODE OVERRIDES — force correct colors on all dashboard
+       cards since Tailwind dark: variants are not compiled in dist
+    ============================================================ */
+
+    /* --- Generic section card (chart, search, progress, actions, orders) --- */
+    .dark .dash-card {
+        background-color: #1f2937 !important;
+        border-color: #374151 !important;
+    }
+
+    .dark .dash-card h2,
+    .dark .dash-card .dash-heading {
+        color: #e5e7eb !important;
+    }
+
+    .dark .dash-card p,
+    .dark .dash-card span.dash-muted {
+        color: #9ca3af !important;
+    }
+
+    /* --- KPI stat cards --- */
+    .dark .kpi-card {
+        background-color: #1f2937 !important;
+        border-color: #374151 !important;
+    }
+
+    .dark .kpi-card .kpi-title {
+        color: #9ca3af !important;
+    }
+
+    .dark .kpi-card .kpi-metric {
+        color: #ffffff !important;
+    }
+
+    .dark .kpi-card .kpi-footer {
+        color: #6b7280 !important;
+    }
+
+    /* --- Alert variants --- */
+    .dark .alert-warning {
+        background-color: rgba(120, 53, 15, 0.2) !important;
+        border-color: #92400e !important;
+        color: #fcd34d !important;
+    }
+
+    .dark .alert-info {
+        background-color: rgba(30, 58, 138, 0.2) !important;
+        border-color: #1e40af !important;
+        color: #93c5fd !important;
+    }
+
+    .dark .alert-success {
+        background-color: rgba(6, 78, 59, 0.2) !important;
+        border-color: #065f46 !important;
+        color: #6ee7b7 !important;
+    }
+
+    /* --- Search input --- */
+    .dark .dash-input {
+        background-color: #374151 !important;
+        border-color: #4b5563 !important;
+        color: #ffffff !important;
+    }
+
+    .dark .dash-input::placeholder {
+        color: #9ca3af !important;
+    }
+
+    /* --- Recent orders table --- */
+    .dark .orders-table thead tr {
+        background-color: #374151 !important;
+        color: #9ca3af !important;
+    }
+
+    .dark .orders-table tbody tr {
+        background-color: #1f2937 !important;
+        border-color: #374151 !important;
+        color: #d1d5db !important;
+    }
+
+    .dark .orders-table tbody tr:hover {
+        background-color: #374151 !important;
+    }
+
+    .dark .orders-table td.order-num {
+        color: #ffffff !important;
+    }
+
+    /* --- Order status badges --- */
+    .dark .badge-pending {
+        background-color: rgba(120, 53, 15, 0.3) !important;
+        color: #fdba74 !important;
+    }
+
+    .dark .badge-shipped {
+        background-color: rgba(6, 78, 59, 0.3) !important;
+        color: #6ee7b7 !important;
+    }
+
+    .dark .badge-default {
+        background-color: rgba(30, 58, 138, 0.3) !important;
+        color: #93c5fd !important;
+    }
+
+    /* --- Progress bar track --- */
+    .dark .progress-track {
+        background-color: #374151 !important;
+    }
+
+    /* --- "Ver todos" link --- */
+    .dark .link-primary {
+        color: #818cf8 !important;
+    }
+
+    .dark .link-primary:hover {
+        color: #a5b4fc !important;
+    }
+
+    /* --- Quick action links --- */
+    .dark .action-link {
+        color: #d1d5db !important;
+    }
+
+    .dark .action-link:hover {
+        color: #818cf8 !important;
+    }
+</style>
+{% if kpi %}
+<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+    {% for item in kpi %}
+    <div class="kpi-card bg-white dark:bg-gray-800 rounded-md shadow p-6 border border-gray-200 dark:border-gray-700">
+        <h3 class="kpi-title text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">{{ item.title }}</h3>
+        <p class="kpi-metric text-3xl font-bold text-gray-900 dark:text-white mb-2">{{ item.metric }}</p>
+        <p class="kpi-footer text-sm text-gray-400 dark:text-gray-500">{{ item.footer }}</p>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Alerts Section -->
+{% if alerts %}
+<div class="mb-8 space-y-3">
+    {% for alert in alerts %}
+    <div class="p-4 rounded-md shadow-sm border
+        {% if alert.type == 'warning' %}alert-warning bg-orange-50 border-orange-200 text-orange-800
+        {% elif alert.type == 'info' %}alert-info bg-blue-50 border-blue-200 text-blue-800
+        {% else %}alert-success bg-green-50 border-green-200 text-green-800{% endif %}">
+        <div class="flex items-center">
+            <span class="material-symbols-outlined mr-2">
+                {% if alert.type == 'warning' %}warning
+                {% elif alert.type == 'info' %}info
+                {% else %}check_circle{% endif %}
+            </span>
+            <p class="text-sm font-medium">{{ alert.message }}</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Chart Section -->
+<div class="dash-card bg-white rounded-md shadow p-6 border border-gray-200 mb-8">
+    <h2 class="text-lg font-semibold mb-4 text-gray-800">Pedidos nos Últimos 7 Dias</h2>
+    <div class="relative h-64">
+        <canvas id="ordersChart"></canvas>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+
+    <!-- Left Column: Actions & Progress -->
+    <div class="lg:col-span-1 space-y-8">
+
+        <!-- Quick Search -->
+        <div class="dash-card bg-white rounded-md shadow p-6 border border-gray-200">
+            <h2 class="text-lg font-semibold mb-4 text-gray-800">Busca Rápida de Pedido</h2>
+            <form action="{% url 'admin:orders_order_changelist' %}" method="get" class="flex gap-2">
+                <input type="text" name="q" placeholder="Nº do Pedido ou Rota..."
+                    class="dash-input flex-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-md focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5">
+                <button type="submit"
+                    class="text-white bg-primary-600 hover:bg-primary-700 focus:ring-4 focus:outline-none focus:ring-primary-300 font-medium rounded-md text-sm px-4 py-2.5 text-center">
+                    Buscar
+                </button>
+            </form>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="dash-card bg-white rounded-md shadow p-6 border border-gray-200">
+            <h2 class="text-lg font-semibold mb-2 text-gray-800">Meta Diária de Picking</h2>
+            <p class="text-sm text-gray-500 mb-4">Progresso de separação dos pedidos de hoje.</p>
+            <div class="flex justify-between mb-1">
+                <span class="text-sm font-medium text-primary-700">{{ progress_data.picked }} processados</span>
+                <span class="text-sm font-medium text-gray-500">{{ progress_data.total }} totais</span>
+            </div>
+            <div class="progress-track w-full bg-gray-200 rounded-full h-2.5">
+                <div class="bg-primary-600 h-2.5 rounded-full" style="width: {{ progress_data.percentage }}%"></div>
+            </div>
+            <p class="text-right text-xs mt-1 font-semibold text-gray-500">{{ progress_data.percentage }}% concluído</p>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="dash-card bg-white rounded-md shadow p-6 border border-gray-200 relative overflow-hidden">
+            <h2 class="text-lg font-semibold mb-4 text-gray-800">Ações Rápidas</h2>
+            <div class="flex flex-col gap-3 relative z-10">
+                <a href="{% url 'admin:orders_order_changelist' %}?status__exact=pending"
+                    class="action-link flex items-center text-sm font-medium text-gray-700 hover:text-primary-600 transition-colors">
+                    <span class="material-symbols-outlined mr-2 text-primary-500">list_alt</span>
+                    Ver Fila de Separação
+                </a>
+                <a href="{% url 'admin:products_product_changelist' %}"
+                    class="action-link flex items-center text-sm font-medium text-gray-700 hover:text-primary-600 transition-colors">
+                    <span class="material-symbols-outlined mr-2 text-primary-500">category</span>
+                    Atualizar Catálogo
+                </a>
+            </div>
+            <span
+                class="material-symbols-outlined absolute -bottom-4 -right-4 text-8xl text-gray-100 pointer-events-none select-none">flash_on</span>
+        </div>
+
+    </div>
+
+    <!-- Right Column: Recent Activity -->
+    <div class="lg:col-span-2">
+        <div class="dash-card bg-white rounded-md shadow border border-gray-200 h-full">
+            <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-800">Últimos Pedidos Recebidos</h2>
+                <a href="{% url 'admin:orders_order_changelist' %}"
+                    class="link-primary text-sm text-primary-600 hover:text-primary-700 hover:underline">Ver todos</a>
+            </div>
+            <div>
+                <table class="orders-table w-full text-sm text-left text-gray-500 table-fixed">
+                    <colgroup>
+                        <col style="width: 12%">
+                        <col style="width: 43%">
+                        <col style="width: 15%">
+                        <col style="width: 30%">
+                    </colgroup>
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b border-gray-200">
+                        <tr>
+                            <th scope="col" class="px-4 py-3">Pedido</th>
+                            <th scope="col" class="px-4 py-3">Cliente</th>
+                            <th scope="col" class="px-4 py-3">Status</th>
+                            <th scope="col" class="px-4 py-3">Tempo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in recent_orders %}
+                        <tr class="bg-white border-b hover:bg-gray-50 cursor-pointer"
+                            onclick="window.location='{% url 'admin:orders_order_change' order.id %}'">
+                            <td class="order-num px-4 py-4 font-medium text-gray-900 whitespace-nowrap">
+                                {{ order.order_number }}
+                            </td>
+                            <td class="px-4 py-4 overflow-hidden">
+                                <span class="block truncate" title="{{ order.customer.name }}">
+                                    {{ order.customer.name }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="px-2 py-1 text-xs font-medium rounded-full
+                                    {% if order.status == 'pending' %}badge-pending bg-orange-100 text-orange-800
+                                    {% elif order.status == 'shipped' %}badge-shipped bg-green-100 text-green-800
+                                    {% else %}badge-default bg-blue-100 text-blue-800{% endif %}">
+                                    {{ order.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-4 text-xs whitespace-nowrap">
+                                {{ order.created_at|timesince }} atrás
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="px-4 py-8 text-center text-gray-500 font-medium">Nenhum pedido
+                                recente encontrado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{{ block.super }}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var ctx = document.getElementById('ordersChart').getContext('2d');
+
+        function isDark() {
+            return document.documentElement.classList.contains('dark') ||
+                document.body.classList.contains('dark');
+        }
+
+        function getChartColors() {
+            var dark = isDark();
+            return {
+                tickColor: dark ? '#9ca3af' : '#6b7280',
+                gridColor: dark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)'
+            };
+        }
+
+        var colors = getChartColors();
+
+        var chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: {{ chart_labels| safe }},
+        datasets: [{
+            label: 'Pedidos',
+            data: {{ chart_data| safe }},
+        borderColor: '#0284c7',
+        backgroundColor: 'rgba(2, 132, 199, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointHoverRadius: 5
+                }]
+            },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: { color: colors.tickColor, stepSize: 1, font: { size: 11 } },
+                grid: { color: colors.gridColor, drawBorder: false }
+            },
+            x: {
+                ticks: { color: colors.tickColor, font: { size: 11 } },
+                grid: { display: false }
+            }
+        }
+    }
+        });
+
+    // React to light ↔ dark mode switches in real time
+    var observer = new MutationObserver(function () {
+        var c = getChartColors();
+        chart.options.scales.y.ticks.color = c.tickColor;
+        chart.options.scales.y.grid.color = c.gridColor;
+        chart.options.scales.x.ticks.color = c.tickColor;
+        chart.update('none');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    });
+</script>
+{% endblock %}

@@ -3,8 +3,8 @@ set -e
 
 # ─── Apply database migrations & collect static files ────────────────────────
 # On Railway, these are handled by the preDeployCommand in railway.toml.
-# The RAILWAY_ENVIRONMENT variable is automatically set by Railway.
-if [ -z "$RAILWAY_ENVIRONMENT" ]; then
+# RAILWAY_ENVIRONMENT_NAME is automatically set by Railway.
+if [ -z "$RAILWAY_ENVIRONMENT_NAME" ]; then
   # ─── Wait for PostgreSQL to be available ─────────────────────────────────────
   echo "Waiting for PostgreSQL at ${DB_HOST}:${DB_PORT}..."
   until python -c "

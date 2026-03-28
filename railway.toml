@@ -15,7 +15,7 @@ watchPatterns = [
 
 [deploy]
 # Uvicorn production server — Railway injects $PORT automatically
-startCommand = "uvicorn core.asgi:application --host 0.0.0.0 --port $PORT --workers ${UVICORN_WORKERS:-4} --log-level info"
+startCommand = "uvicorn core.asgi:application --host 0.0.0.0 --port $PORT --workers 4 --log-level info"
 # Migrations and static collection run BEFORE the new container receives traffic
 preDeployCommand = "python manage.py migrate --noinput && python manage.py collectstatic --noinput --clear"
 healthcheckPath = "/health/"

@@ -22,6 +22,9 @@ COPY mkdocs.yml ./
 RUN addgroup --system docs && adduser --system --ingroup docs docs
 USER docs
 
-EXPOSE 8001
+# Railway injects PORT; default to 8001 for local use
+ENV PORT=8001
+EXPOSE ${PORT}
 
-CMD ["/app/.venv/bin/mkdocs", "serve", "-a", "0.0.0.0:8001"]
+# Use shell form so $PORT is expanded at runtime
+CMD /app/.venv/bin/mkdocs serve -a 0.0.0.0:${PORT}

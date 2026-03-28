@@ -12,8 +12,7 @@ watchPatterns = [
 ]
 
 [deploy]
-# MkDocs live server — $PORT is injected by Railway
-startCommand = "/app/.venv/bin/mkdocs serve -a 0.0.0.0:$PORT"
+# CMD in Dockerfile handles startup with $PORT
 healthcheckPath = "/"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"

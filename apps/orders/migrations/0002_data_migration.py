@@ -104,16 +104,44 @@ def transferir_dados(apps, schema_editor):
                     v_row = cursor.fetchone()
                     total_vols = v_row[0] if v_row else None
 
-                # Criar Order
-                order_inst, created = Order.objects.get_or_create(
-                    picking=picking,
-                    order_number=num_pedido,
-                    defaults={
-                        'order_route': rota or '', 'customer': cliente_instancia,
-                        'total_volumes': total_vols, 'status': 'shipped',
-                        'created_at': criado_em
-                    }
+                # Fallback to prevent UndefinedColumn if 'orders' exists but lacks 'order_route'
+                cursor.execute("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='orders' AND column_name='order_route'
+                """)
+                has_order_route_col = bool(cursor.fetchone())
+
+                cursor.execute(
+                    "SELECT id FROM orders WHERE picking = %s AND order_number = %s",
+                    [picking, num_pedido]
                 )
+                existing_row = cursor.fetchone()
+                
+                c_data = criado_em
+
+                if not existing_row:
+                    if has_order_route_col:
+                        cursor.execute(
+                            "INSERT INTO orders (picking, order_number, order_route, customer_id, total_volumes, status, created_at, updated_at, invoice_number, scheduled_date, condition, operation, origin, typist, salesperson, releaser, situation, pending_payment) "
+                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, '', '', '', '', '', '', '', '', '', '') RETURNING id",
+                            [picking, num_pedido, rota or '', cliente_instancia.id, total_vols, 'shipped', c_data, c_data]
+                        )
+                        order_id = cursor.fetchone()[0]
+                    else:
+                        Delivery = apps.get_model('deliveries', 'Delivery')
+                        delivery, _ = Delivery.objects.get_or_create(
+                            route=rota or '',
+                            defaults={'manifest': '', 'carrier': ''}
+                        )
+                        cursor.execute(
+                            "INSERT INTO orders (picking, order_number, delivery_id, customer_id, total_volumes, status, created_at, updated_at, invoice_number, scheduled_date, condition, operation, origin, typist, salesperson, releaser, situation, pending_payment) "
+                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, '', '', '', '', '', '', '', '', '', '') RETURNING id",
+                            [picking, num_pedido, delivery.id, cliente_instancia.id, total_vols, 'shipped', c_data, c_data]
+                        )
+                        order_id = cursor.fetchone()[0]
+                else:
+                    order_id = existing_row[0]
 
                 # --- MIGRAR ITENS DO PEDIDO ---
                 if 'pedido_itens' in available_tables:
@@ -124,7 +152,7 @@ def transferir_dados(apps, schema_editor):
                         prod = Product.objects.filter(sku_code=sku).first()
                         if prod:
                             OrderItem.objects.get_or_create(
-                                order=order_inst, product=prod,
+                                order_id=order_id, product=prod,
                                 defaults={'quantity': qtd}
                             )
 

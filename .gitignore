@@ -12,6 +12,7 @@ wheels/
 # Arquivos de banco de dados
 *.db
 *.sqlite3
+data/
 
 # Arquivos de mídia
 media/

@@ -72,13 +72,17 @@ def transferir_dados(apps, schema_editor):
                 # Deduplicação de Customer pelo código extraído/limpo
                 customer_inst = Customer.objects.filter(code=search_code).first()
                 if not customer_inst:
-                    novo_endereco = Address.objects.create(
+                    novo_endereco, _ = Address.objects.get_or_create(
                         street=rua or '', number=num or '', district=bairro or '',
                         city=cid or '', state=est or '', zip_code=cep or '', country='Brasil'
                     )
-                    customer_inst = Customer.objects.create(
-                        code=search_code, name=name, 
-                        id_number=cpf or '', address=novo_endereco
+                    customer_inst, _ = Customer.objects.get_or_create(
+                        code=search_code,
+                        defaults={
+                            'name': name,
+                            'id_number': cpf or '',
+                            'address': novo_endereco
+                        }
                     )
 
             # --- MIGRAR ENCOMENDAS (ORDERS) ---

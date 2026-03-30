@@ -26,7 +26,7 @@ class UploadImportView(
     View,
 ):
     template_name = "upload_import.html"
-    permission_required = "imports.add_import_batch"
+    permission_required = "imports.add_importbatch"
 
     def get(self, request, *args, **kwargs):
         recent_batches = ImportBatch.objects.order_by("-created_at")[:10]
@@ -81,7 +81,7 @@ class ImportProgressAPIView(
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        if not request.user.has_perm("imports.view_import_batch"):
+        if not request.user.has_perm("imports.view_importbatch"):
             return Response(
                 {"error": "Você não tem permissão para ver isso."}, status=403
             )

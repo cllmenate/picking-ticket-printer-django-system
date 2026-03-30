@@ -3,8 +3,17 @@ set -e
 
 # Fix volume permissions if running as root (Railway volumes are mounted as root)
 if [ "$(id -u)" = "0" ]; then
-  chmod 755 /app/uploads 2>/dev/null || true
-  chown -R django:django /app/uploads 2>/dev/null || true
+  echo "Running as root (UID: $(id -u))"
+  if [ -d "/app/uploads" ]; then
+    echo "Fixing permissions on /app/uploads..."
+    chmod 777 /app/uploads
+    chown -R django:django /app/uploads
+    echo "Permissions fixed: $(ls -ld /app/uploads)"
+  else
+    echo "Warning: /app/uploads directory does not exist"
+  fi
+else
+  echo "Not running as root (UID: $(id -u)), skipping permission fixes"
 fi
 
 # ─── Apply database migrations & collect static files ────────────────────────

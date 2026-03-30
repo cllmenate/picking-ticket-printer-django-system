@@ -289,12 +289,9 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Celery Configuration
-# Use CELERY_BROKER_URL if explicitly set, otherwise fall back to REDIS_URL.
-# For the result backend, prefer an explicit CELERY_RESULT_BACKEND env var;
-# fall back to a local SQLite-backed store so that result tracking never
-# requires Redis authentication credentials.
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://redis:6379/0"))
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "db+sqlite:///celery_results.db")
+# Use REDIS_URL from Railway which includes proper authentication
+CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "rpc://")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

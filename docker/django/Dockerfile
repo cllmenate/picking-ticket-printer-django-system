@@ -91,8 +91,8 @@ RUN mkdir -p /staticfiles /media && chown django:django /staticfiles /media
 # Ensure upload volume is writable by django user
 RUN mkdir -p /app/uploads && chown django:django /app/uploads
 
-USER django
-
 EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
+
+USER django

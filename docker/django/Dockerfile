@@ -62,9 +62,9 @@ COPY pyproject.toml uv.lock README.md ./
 
 # Conditionally install dependencies (with or without dev group)
 RUN if [ "$INSTALL_DEV" = "true" ]; then \
-    uv sync --frozen; \
+    uv sync; \
     else \
-    uv sync --frozen --no-dev; \
+    uv sync --no-dev; \
     fi
 
 # ─── Runtime stage ───────────────────────────────────────────────────────────

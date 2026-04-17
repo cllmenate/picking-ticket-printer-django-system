@@ -115,7 +115,6 @@ class DatabaseImporter:
                         manifest=manifest,
                         carrier=carrier,
                         defaults={
-                            "delivery": order_data.get("delivery", ""),
                             "route": route,
                             "vehicle": order_data.get("vehicle", ""),
                             "driver": order_data.get("driver", ""),
@@ -127,7 +126,6 @@ class DatabaseImporter:
                     delivery, _ = Delivery.objects.update_or_create(
                         route=route,
                         defaults={
-                            "delivery": order_data.get("delivery", ""),
                             "vehicle": order_data.get("vehicle", ""),
                             "driver": order_data.get("driver", ""),
                             "helper": order_data.get("helper", ""),

@@ -16,7 +16,7 @@ watchPatterns = [
 [deploy]
 # Startup is handled by docker/django/entrypoint.sh (expands $PORT via shell)
 # Migrations and static collection run BEFORE the new container receives traffic
-preDeployCommand = "python manage.py migrate --noinput && python manage.py collectstatic --noinput --clear && python manage.py shell -c \"from django.contrib.auth.models import User; User.objects.filter(username='${{SUPERUSER_USERNAME}}').delete(); User.objects.create_superuser('${{SUPERUSER_USERNAME}}', '${{SUPERUSER_EMAIL}}', '${{SUPERUSER_PASSWORD}}')\""
+preDeployCommand = "python manage.py migrate --noinput && python manage.py collectstatic --noinput --clear && python manage.py create_superuser"
 healthcheckPath = "/health/"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

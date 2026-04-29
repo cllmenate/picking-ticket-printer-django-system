@@ -55,11 +55,22 @@ SIGNING_KEY = os.getenv("SIGNING_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG", default=False)
 
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[
+    "localhost",
+    "127.0.0.1",
+    "picking-ticket-printer-django-system-production-f15d.up.railway.app",
+    "tickets.avancefarma.com.br",
+    "*"
+])
 
 CSRF_TRUSTED_ORIGINS = env.list(
     "CSRF_TRUSTED_ORIGINS",
-    default=["http://localhost:8000", "http://127.0.0.1:8000"]
+    default=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "https://picking-ticket-printer-django-system-production-f15d.up.railway.app",
+        "https://tickets.avancefarma.com.br"
+    ]
 )
 
 
@@ -90,7 +101,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "core.middleware.HealthCheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -131,7 +144,10 @@ WSGI_APPLICATION = "core.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-if os.getenv("POSTGRES_DB"):
+# Railway injects DATABASE_URL — use it with priority
+if os.getenv("DATABASE_URL"):
+    DATABASES = {"default": env.db_url("DATABASE_URL")}
+elif os.getenv("POSTGRES_DB"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql_psycopg2",
@@ -198,6 +214,13 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = env("STATIC_ROOT", default=BASE_DIR / "staticfiles")
 
+# WhiteNoise: compressed and hashed static files for production
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 # Media files
 MEDIA_URL = "media/"
 MEDIA_ROOT = env("MEDIA_ROOT", default=BASE_DIR / "media")
@@ -207,7 +230,7 @@ MEDIA_ROOT = env("MEDIA_ROOT", default=BASE_DIR / "media")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS
-CORS_ALLOW_ALL_ORIGINS = True  # For MVP and local QZ Tray communication
+CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=DEBUG)
 
 # DRF & SimpleJWT
 REST_FRAMEWORK = {
@@ -266,19 +289,16 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Celery Configuration
-CELERY_BROKER_URL = os.getenv(
-    "CELERY_BROKER_URL", "redis://redis:6379/0"
-)
-CELERY_RESULT_BACKEND = os.getenv(
-    "CELERY_RESULT_BACKEND", "redis://redis:6379/0"
-)
+# Use REDIS_URL from Railway which includes proper authentication
+CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "rpc://")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
 # Cache Configuration (Redis)
-if os.getenv("POSTGRES_DB"):
+if os.getenv("REDIS_URL") or os.getenv("POSTGRES_DB"):
     CACHES = {
         "default": {
             "BACKEND": "django_redis.cache.RedisCache",
@@ -296,11 +316,26 @@ else:
     }
 
 
+# Session Configuration (Redis)
+# Use Redis for sessions to avoid corruption issues with database sessions
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+SESSION_COOKIE_AGE = 1209600  # 2 weeks
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+
+
 # ─── Security Best Practices ─────────────────
 X_FRAME_OPTIONS = "DENY"
 
+# Railway (and most PaaS) terminate TLS at the proxy layer.
+# This header tells Django to trust the proxy's X-Forwarded-Proto header.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 if not DEBUG:
-    SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
+    # Default False: Railway handles TLS at the edge, so Django should not redirect.
+    # Set SECURE_SSL_REDIRECT=True only if you handle TLS differently.
+    SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000)

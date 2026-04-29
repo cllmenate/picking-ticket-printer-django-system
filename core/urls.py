@@ -3,6 +3,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -12,7 +14,15 @@ from drf_spectacular.views import (
 
 API_PATH = "api/v1/"
 
+
+@csrf_exempt
+def health_check(request):
+    """Lightweight health check for Railway monitoring."""
+    return JsonResponse({"status": "ok"})
+
+
 urlpatterns = [
+    path("health/", health_check, name="health-check"),
     path("admin/", admin.site.urls),
     # Auth
     path(API_PATH, include("apps.authentication.urls")),

@@ -1,0 +1,17 @@
+# ─── Railway Config: MkDocs Documentation Server ─────────────────────────────
+# Dashboard: Create a new service → same repo → Config Path: railway-docs.toml
+# Docs: https://docs.railway.com/config-as-code/reference
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "docker/docs/Dockerfile"
+watchPatterns = [
+    "docs/**",
+    "mkdocs.yml",
+]
+
+[deploy]
+# CMD in Dockerfile handles startup with $PORT via shell form
+# Healthcheck temporarily removed to debug startup — re-enable after first successful deploy
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

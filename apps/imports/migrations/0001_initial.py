@@ -21,8 +21,6 @@ class Migration(migrations.Migration):
                 ('errors', models.TextField(blank=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
-            options={
-                'db_table': 'import_batches',
-            },
+
         ),
     ]

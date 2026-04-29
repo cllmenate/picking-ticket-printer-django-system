@@ -1,7 +1,6 @@
 import json
-import os
+import logging
 
-from django.conf import settings
 from django.contrib.auth.mixins import (
     LoginRequiredMixin,
     PermissionRequiredMixin,
@@ -19,6 +18,8 @@ from apps.orders.models import Order
 from .models import ImportBatch
 from .tasks import process_import_batch_task
 
+logger = logging.getLogger(__name__)
+
 
 class UploadImportView(
     LoginRequiredMixin,
@@ -26,7 +27,7 @@ class UploadImportView(
     View,
 ):
     template_name = "upload_import.html"
-    permission_required = "imports.add_import_batch"
+    permission_required = "imports.add_importbatch"
 
     def get(self, request, *args, **kwargs):
         recent_batches = ImportBatch.objects.order_by("-created_at")[:10]
@@ -48,18 +49,18 @@ class UploadImportView(
                 status=400,
             )
 
-        fs = FileSystemStorage(
-            location=os.path.join(settings.BASE_DIR, "tmp", "uploads")
-        )
+        upload_dir = "/app/uploads"
+
+        fs = FileSystemStorage(location=upload_dir)
 
         file_paths = []
         for f in import_files:
             try:
                 saved_name = fs.save(f.name, f)
                 full_path = fs.path(saved_name)
-                file_paths.append((full_path, f.name))
+                file_paths.append((full_path, saved_name))
             except Exception:
-                pass
+                logger.exception("Failed to save uploaded file: %s", f.name)
 
         if not file_paths:
             return JsonResponse(
@@ -81,7 +82,7 @@ class ImportProgressAPIView(
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        if not request.user.has_perm("imports.view_import_batch"):
+        if not request.user.has_perm("imports.view_importbatch"):
             return Response(
                 {"error": "Você não tem permissão para ver isso."}, status=403
             )

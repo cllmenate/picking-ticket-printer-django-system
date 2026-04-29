@@ -10,8 +10,6 @@ class ImportBatch(models.Model):
     errors = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        db_table = "import_batches"
 
     def __str__(self):
         return f"Lote {self.id} - {self.status} ({self.processed_files}/{self.total_files})"  # noqa: E501

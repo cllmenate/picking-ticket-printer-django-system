@@ -43,6 +43,8 @@ except Exception:
   python manage.py collectstatic --noinput --clear
 else
   echo "Railway environment detected — migrations handled by preDeployCommand"
+  echo "Creating superuser from environment variables..."
+  python manage.py create_superuser
 fi
 # ─── Start Application ────────────────────────────────────────────────────────
 # If a command is passed to the container, execute it instead of the default uvicorn

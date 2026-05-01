@@ -33,22 +33,14 @@ class ERPSyncTriggerView(LoginRequiredMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        import json
         from datetime import date
 
         from django.conf import settings
 
         from apps.erp_sync.tasks import sync_erp_orders_task
 
-        # Lê a data opcional do body (formato YYYY-MM-DD)
-        # Se não informada, usa hoje (comportamento padrão)
-        body = {}
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, Exception):
-            pass
-
-        raw_date = body.get("date", "").strip()
+        # request.data é o body já parseado pelo DRF (funciona com JSON e form-data)
+        raw_date = (request.data.get("date") or "").strip()
         if raw_date:
             try:
                 target_date = date.fromisoformat(raw_date)
@@ -63,21 +55,19 @@ class ERPSyncTriggerView(LoginRequiredMixin, APIView):
         branch_ids = getattr(settings, "ERP_BRANCH_IDS", [27, 19])
         branch_ids_str = ",".join(str(b) for b in branch_ids)
 
-        # Cria o log pré-criado para polling imediato pelo frontend
         log = ERPSyncLog.objects.create(
             sync_date=target_date,
             branch_ids=branch_ids_str,
             status=ERPSyncLog.StatusChoices.RUNNING,
         )
 
-        # Enfileira a task com a data e o log_id
         sync_erp_orders_task.apply_async(kwargs={
             "manual_log_id": log.id,
             "sync_date": target_date.strftime("%Y-%m-%d"),
         })
 
         logger.info(
-            "ERP Sync: sincronização manual disparada pelo usuário %s — data=%s log_id=%s",
+            "ERP Sync: manual pelo usuário %s — data=%s log_id=%s",
             request.user,
             target_date,
             log.id,
@@ -89,6 +79,7 @@ class ERPSyncTriggerView(LoginRequiredMixin, APIView):
             "sync_date": target_date.strftime("%d/%m/%Y"),
             "message": f"Sincronização de {target_date.strftime('%d/%m/%Y')} iniciada.",
         }, status=202)
+
 
 
 class ERPSyncStatusView(APIView):

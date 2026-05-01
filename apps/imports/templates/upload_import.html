@@ -165,14 +165,14 @@
             <table class="w-full border-collapse text-sm">
                 <thead>
                     <tr>
-                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Data Sync</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Data Sincronizada</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Filiais</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Recebidos</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Criados</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Atualizados</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Erros</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Status</th>
-                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Iniciado em</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Última Verificação</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -201,18 +201,44 @@
                             <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Erro</span>
                             {% endif %}
                         </td>
-                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ log.created_at|date:"d/m/Y H:i" }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-500 text-xs whitespace-nowrap">{{ log.last_checked_at|date:"d/m/Y H:i" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+
+        <!-- Paginação -->
+        {% if recent_sync_logs.paginator.num_pages > 1 %}
+        <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+            <span class="text-xs text-slate-400">
+                Página {{ recent_sync_logs.number }} de {{ recent_sync_logs.paginator.num_pages }}
+                &nbsp;·&nbsp; {{ recent_sync_logs.paginator.count }} registros no total
+            </span>
+            <div class="flex items-center gap-2">
+                {% if recent_sync_logs.has_previous %}
+                <a href="?sync_page={{ recent_sync_logs.previous_page_number }}"
+                   class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors no-underline">
+                    ← Anterior
+                </a>
+                {% endif %}
+                {% if recent_sync_logs.has_next %}
+                <a href="?sync_page={{ recent_sync_logs.next_page_number }}"
+                   class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 transition-colors no-underline">
+                    Próxima →
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
         {% else %}
         <p class="text-slate-500 text-sm m-0">Nenhuma sincronização via API registrada ainda.<br>
             <span class="text-xs text-slate-400">As sincronizações começarão automaticamente após o deploy do serviço Beat.</span>
         </p>
         {% endif %}
     </div>
+
 
 {% endblock %}
 

@@ -47,17 +47,29 @@ class ERPSyncLog(models.Model):
         verbose_name="Detalhe do Erro",
     )
     created_at = models.DateTimeField(
-        auto_now_add=True, verbose_name="Iniciado em"
+        auto_now_add=True, verbose_name="Primeira Sincronização"
+    )
+    last_checked_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Última Verificação",
+        help_text="Atualizado em toda requisição à API, mesmo sem novos pedidos.",
     )
     finished_at = models.DateTimeField(
-        null=True, blank=True, verbose_name="Finalizado em"
+        null=True, blank=True, verbose_name="Última Conclusão"
     )
 
     class Meta:
         db_table = "erp_sync_logs"
         verbose_name = "Log de Sincronização ERP"
         verbose_name_plural = "Logs de Sincronização ERP"
-        ordering = ["-created_at"]
+        ordering = ["-last_checked_at"]
+        # Uma linha por combinação de data+filiais — atualizada no lugar
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sync_date", "branch_ids"],
+                name="erp_sync_log_date_branches_uniq",
+            )
+        ]
 
     def __str__(self):
         return (

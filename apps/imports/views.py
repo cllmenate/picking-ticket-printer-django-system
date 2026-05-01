@@ -30,18 +30,27 @@ class UploadImportView(
     permission_required = "imports.add_importbatch"
 
     def get(self, request, *args, **kwargs):
+        from django.core.paginator import Paginator
+
         from apps.erp_sync.models import ERPSyncLog
 
         recent_batches = ImportBatch.objects.order_by("-created_at")[:10]
         recent_orders = Order.objects.order_by("-created_at")[:10]
-        recent_sync_logs = ERPSyncLog.objects.order_by("-created_at")[:10]
+
+        # Paginação dos logs de sincronização (10 por página, mais recentes primeiro)
+        sync_logs_qs = ERPSyncLog.objects.order_by("-last_checked_at")
+        paginator = Paginator(sync_logs_qs, 10)
+        page_number = request.GET.get("sync_page", 1)
+        sync_logs_page = paginator.get_page(page_number)
+
         return render(
             request,
             self.template_name,
             {
                 "recent_batches": recent_batches,
                 "recent_orders": recent_orders,
-                "recent_sync_logs": recent_sync_logs,
+                "recent_sync_logs": sync_logs_page,
+                "sync_logs_paginator": paginator,
             },
         )
 

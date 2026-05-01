@@ -55,11 +55,16 @@ class ERPSyncTriggerView(LoginRequiredMixin, APIView):
         branch_ids = getattr(settings, "ERP_BRANCH_IDS", [27, 19])
         branch_ids_str = ",".join(str(b) for b in branch_ids)
 
-        log = ERPSyncLog.objects.create(
+        # Usa get_or_create para respeitar o unique_together (sync_date, branch_ids)
+        # Se já existe um log para esse dia, reutiliza e marca como running novamente
+        log, created = ERPSyncLog.objects.get_or_create(
             sync_date=target_date,
             branch_ids=branch_ids_str,
-            status=ERPSyncLog.StatusChoices.RUNNING,
+            defaults={"status": ERPSyncLog.StatusChoices.RUNNING},
         )
+        if not created:
+            log.status = ERPSyncLog.StatusChoices.RUNNING
+            log.save(update_fields=["status"])
 
         sync_erp_orders_task.apply_async(kwargs={
             "manual_log_id": log.id,
@@ -67,10 +72,8 @@ class ERPSyncTriggerView(LoginRequiredMixin, APIView):
         })
 
         logger.info(
-            "ERP Sync: manual pelo usuário %s — data=%s log_id=%s",
-            request.user,
-            target_date,
-            log.id,
+            "ERP Sync: manual pelo usuário %s — data=%s log_id=%s (novo=%s)",
+            request.user, target_date, log.id, created,
         )
 
         return Response({
@@ -79,6 +82,7 @@ class ERPSyncTriggerView(LoginRequiredMixin, APIView):
             "sync_date": target_date.strftime("%d/%m/%Y"),
             "message": f"Sincronização de {target_date.strftime('%d/%m/%Y')} iniciada.",
         }, status=202)
+
 
 
 

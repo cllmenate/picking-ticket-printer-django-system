@@ -14,6 +14,7 @@ class ERPSyncLogAdmin(ModelAdmin):
         "orders_created",
         "orders_updated",
         "orders_errors",
+        "last_checked_at",
         "created_at",
         "finished_at",
     )
@@ -27,6 +28,7 @@ class ERPSyncLogAdmin(ModelAdmin):
         "orders_updated",
         "orders_errors",
         "error_detail",
+        "last_checked_at",
         "created_at",
         "finished_at",
     )

@@ -52,7 +52,7 @@ def sync_erp_orders_task(
     # Import aqui para evitar circular import no carregamento do Celery
     from apps.erp_sync.models import ERPSyncLog
 
-    # Resolve a data alvo
+    # ── 1. Resolve a data alvo ──────────────────────────────────────────────
     if sync_date:
         try:
             target_date = date.fromisoformat(sync_date)
@@ -67,55 +67,58 @@ def sync_erp_orders_task(
     branch_ids_str = ",".join(str(b) for b in branch_ids)
 
     logger.info(
-        "ERP Sync: iniciando sincronização para data=%s filiais=%s (manual=%s)",
-        target_str,
-        branch_ids,
-        manual_log_id is not None,
+        "ERP Sync: iniciando verificação para data=%s filiais=%s (manual=%s)",
+        target_str, branch_ids, manual_log_id is not None,
     )
 
-    # Reutiliza o log criado pela view (resync manual) ou cria um novo (Beat)
-    if manual_log_id:
-        try:
-            sync_log = ERPSyncLog.objects.get(id=manual_log_id)
-            sync_log.status = ERPSyncLog.StatusChoices.RUNNING
-            sync_log.save(update_fields=["status"])
-        except ERPSyncLog.DoesNotExist:
-            sync_log = ERPSyncLog.objects.create(
-                sync_date=target_date,
-                branch_ids=branch_ids_str,
-                status=ERPSyncLog.StatusChoices.RUNNING,
-            )
-    else:
-        sync_log = ERPSyncLog.objects.create(
-            sync_date=target_date,
-            branch_ids=branch_ids_str,
-            status=ERPSyncLog.StatusChoices.RUNNING,
-        )
-
+    # ── 2. Busca os pedidos na API ──────────────────────────────────────────
     try:
         orders = ERPOrderService.fetch_orders_for_all_branches(target_str)
     except Exception as exc:
         logger.exception("ERP Sync: falha ao buscar pedidos da API: %s", exc)
-        sync_log.status = ERPSyncLog.StatusChoices.ERROR
-        sync_log.error_detail = str(exc)
-        sync_log.finished_at = datetime.now(timezone.utc)
-        sync_log.save(update_fields=["status", "error_detail", "finished_at"])
+        # Erro de rede: atualiza o log pré-existente (manual) ou registra se houver
+        if manual_log_id:
+            try:
+                sync_log = ERPSyncLog.objects.get(id=manual_log_id)
+            except ERPSyncLog.DoesNotExist:
+                sync_log = None
+            if sync_log:
+                sync_log.status = ERPSyncLog.StatusChoices.ERROR
+                sync_log.error_detail = str(exc)
+                sync_log.finished_at = datetime.now(timezone.utc)
+                sync_log.save(update_fields=["status", "error_detail", "finished_at", "last_checked_at"])
         raise self.retry(exc=exc)
 
+    # ── 3. Nenhum pedido retornado ─────────────────────────────────────────
+    # Atualiza last_checked_at no log do dia (se já existir) e encerra SEM criar
+    # nova linha. O Beat não polui a tabela com registros vazios.
     if not orders:
-        logger.info("ERP Sync: nenhum pedido retornado para %s.", target_str)
-        sync_log.status = ERPSyncLog.StatusChoices.SUCCESS
-        sync_log.orders_fetched = 0
-        sync_log.finished_at = datetime.now(timezone.utc)
-        sync_log.save(
-            update_fields=["status", "orders_fetched", "finished_at"]
+        logger.info(
+            "ERP Sync: nenhum pedido novo em %s — nenhuma linha criada.", target_str
         )
-        return {"status": "ok", "orders_fetched": 0}
+        # Se há um log pré-criado pela trigger view (manual), atualiza ele
+        if manual_log_id:
+            try:
+                sync_log = ERPSyncLog.objects.get(id=manual_log_id)
+                sync_log.status = ERPSyncLog.StatusChoices.SUCCESS
+                sync_log.orders_fetched = 0
+                sync_log.finished_at = datetime.now(timezone.utc)
+                sync_log.save(update_fields=["status", "orders_fetched", "finished_at", "last_checked_at"])
+            except ERPSyncLog.DoesNotExist:
+                pass
+        else:
+            # Beat: atualiza last_checked_at no log do dia se ele já existir
+            ERPSyncLog.objects.filter(
+                sync_date=target_date,
+                branch_ids=branch_ids_str,
+            ).update(last_checked_at=datetime.now(timezone.utc))
 
+        return {"status": "ok", "date": target_str, "orders_fetched": 0}
+
+    # ── 4. Há pedidos — importa e salva ────────────────────────────────────
     importer = ERPOrderImporter()
     stats = importer.import_orders(orders)
 
-    # Determina o status final
     if stats["errors"] == 0:
         final_status = ERPSyncLog.StatusChoices.SUCCESS
     elif stats["errors"] < len(orders):
@@ -123,30 +126,54 @@ def sync_erp_orders_task(
     else:
         final_status = ERPSyncLog.StatusChoices.ERROR
 
-    sync_log.status = final_status
-    sync_log.orders_fetched = len(orders)
-    sync_log.orders_created = stats["created"]
-    sync_log.orders_updated = stats["updated"]
-    sync_log.orders_errors = stats["errors"]
-    sync_log.finished_at = datetime.now(timezone.utc)
-    sync_log.save(
-        update_fields=[
-            "status",
-            "orders_fetched",
-            "orders_created",
-            "orders_updated",
-            "orders_errors",
-            "finished_at",
-        ]
-    )
+    now = datetime.now(timezone.utc)
+
+    if manual_log_id:
+        # Trigger manual: atualiza o log pré-criado pela view
+        try:
+            sync_log = ERPSyncLog.objects.get(id=manual_log_id)
+            sync_log.status = final_status
+            sync_log.orders_fetched = len(orders)
+            sync_log.orders_created = stats["created"]
+            sync_log.orders_updated = stats["updated"]
+            sync_log.orders_errors = stats["errors"]
+            sync_log.finished_at = now
+            sync_log.save(update_fields=[
+                "status", "orders_fetched", "orders_created",
+                "orders_updated", "orders_errors", "finished_at", "last_checked_at",
+            ])
+        except ERPSyncLog.DoesNotExist:
+            # Fallback: cria via update_or_create
+            ERPSyncLog.objects.update_or_create(
+                sync_date=target_date,
+                branch_ids=branch_ids_str,
+                defaults={
+                    "status": final_status,
+                    "orders_fetched": len(orders),
+                    "orders_created": stats["created"],
+                    "orders_updated": stats["updated"],
+                    "orders_errors": stats["errors"],
+                    "finished_at": now,
+                },
+            )
+    else:
+        # Beat automático: uma linha por dia, atualizada no lugar
+        ERPSyncLog.objects.update_or_create(
+            sync_date=target_date,
+            branch_ids=branch_ids_str,
+            defaults={
+                "status": final_status,
+                "orders_fetched": len(orders),
+                "orders_created": stats["created"],
+                "orders_updated": stats["updated"],
+                "orders_errors": stats["errors"],
+                "finished_at": now,
+            },
+        )
 
     logger.info(
         "ERP Sync: concluído — data=%s pedidos=%d criados=%d atualizados=%d erros=%d",
-        target_str,
-        len(orders),
-        stats["created"],
-        stats["updated"],
-        stats["errors"],
+        target_str, len(orders), stats["created"], stats["updated"], stats["errors"],
     )
     return {
         "status": "ok",

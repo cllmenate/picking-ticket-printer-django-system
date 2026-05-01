@@ -1,0 +1,25 @@
+# ─── Railway Config: Celery Beat (ERP Sync Scheduler) ────────────────────────
+# Serviço responsável por AGENDAR as tarefas periódicas de sincronização com
+# a API ERP Avance. Ele NÃO executa as tasks — apenas as enfileira no Redis.
+# Quem executa é o Celery Worker (railway-worker.toml), que já existe.
+#
+# Como criar este serviço no Railway:
+#   Dashboard → New Service → GitHub repo → Config Path: railway-beat.toml
+# Docs: https://docs.railway.com/config-as-code/reference
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "docker/django/Dockerfile"
+watchPatterns = [
+    "apps/**",
+    "core/**",
+    "docker/django/**",
+    "pyproject.toml",
+    "uv.lock",
+]
+
+[deploy]
+# Celery Beat — agenda tasks periódicas para o broker Redis
+startCommand = "celery -A core beat -l info"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

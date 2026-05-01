@@ -98,6 +98,7 @@
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Pedido</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Picking</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Cliente</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Origem</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Data de Importação</th>
                     </tr>
                 </thead>
@@ -107,6 +108,19 @@
                         <td class="py-3 px-4 border-b border-slate-200 font-medium text-slate-800 whitespace-nowrap">{{ order.order_number }}</td>
                         <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ order.picking }}</td>
                         <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ order.customer.name }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 whitespace-nowrap">
+                            {% if order.import_source == 'api' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                API ERP
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                Planilha
+                            </span>
+                            {% endif %}
+                        </td>
                         <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ order.created_at|date:"d/m/Y H:i" }}</td>
                     </tr>
                     {% endfor %}
@@ -118,6 +132,114 @@
         {% endif %}
     </div>
 </div>
+
+    <!-- Histórico de Sincronização via API ERP -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8 mt-8">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-violet-100">
+                    <svg class="w-4 h-4 text-violet-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </span>
+                <h3 class="mt-0 mb-0 text-lg font-bold text-slate-800">Sincronizações via API ERP</h3>
+            </div>
+            <div class="flex items-center gap-2">
+                <!-- Seletor de data para sincronização -->
+                <input
+                    type="date"
+                    id="resync-date"
+                    class="px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-violet-400 cursor-pointer"
+                />
+                <button id="btn-resync"
+                    onclick="triggerERPSync()"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-violet-600 text-white border-0 cursor-pointer transition-all hover:bg-violet-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
+                    <svg id="resync-icon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span id="resync-label">Sincronizar</span>
+                </button>
+            </div>
+        </div>
+        <div id="resync-toast" class="hidden mb-4 p-4 rounded-lg border text-sm font-medium"></div>
+        {% if recent_sync_logs %}
+        <div class="overflow-x-auto w-full">
+            <table class="w-full border-collapse text-sm">
+                <thead>
+                    <tr>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Data Sincronizada</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Filiais</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Recebidos</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Criados</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Atualizados</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Erros</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Status</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Última Verificação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_sync_logs %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-3 px-4 border-b border-slate-200 font-medium text-slate-800 whitespace-nowrap">{{ log.sync_date|date:"d/m/Y" }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ log.branch_ids }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap text-center">{{ log.orders_fetched }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-green-700 font-medium whitespace-nowrap text-center">{{ log.orders_created }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-blue-700 font-medium whitespace-nowrap text-center">{{ log.orders_updated }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 whitespace-nowrap text-center">
+                            {% if log.orders_errors > 0 %}
+                            <span class="text-red-600 font-semibold">{{ log.orders_errors }}</span>
+                            {% else %}
+                            <span class="text-slate-400">0</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 border-b border-slate-200 whitespace-nowrap">
+                            {% if log.status == 'running' %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Executando</span>
+                            {% elif log.status == 'success' %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Concluído</span>
+                            {% elif log.status == 'partial' %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Parcial</span>
+                            {% else %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Erro</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-500 text-xs whitespace-nowrap">{{ log.last_checked_at|date:"d/m/Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Paginação -->
+        {% if recent_sync_logs.paginator.num_pages > 1 %}
+        <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+            <span class="text-xs text-slate-400">
+                Página {{ recent_sync_logs.number }} de {{ recent_sync_logs.paginator.num_pages }}
+                &nbsp;·&nbsp; {{ recent_sync_logs.paginator.count }} registros no total
+            </span>
+            <div class="flex items-center gap-2">
+                {% if recent_sync_logs.has_previous %}
+                <a href="?sync_page={{ recent_sync_logs.previous_page_number }}"
+                   class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors no-underline">
+                    ← Anterior
+                </a>
+                {% endif %}
+                {% if recent_sync_logs.has_next %}
+                <a href="?sync_page={{ recent_sync_logs.next_page_number }}"
+                   class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 transition-colors no-underline">
+                    Próxima →
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <p class="text-slate-500 text-sm m-0">Nenhuma sincronização via API registrada ainda.<br>
+            <span class="text-xs text-slate-400">As sincronizações começarão automaticamente após o deploy do serviço Beat.</span>
+        </p>
+        {% endif %}
+    </div>
+
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -246,5 +368,159 @@
         progressContainer.classList.remove('block');
         progressContainer.classList.add('hidden');
     }
+
+    // ─── ERP Resync Button ─────────────────────────────────────────────────────
+    const TRIGGER_URL = '{% url "erp-sync-trigger" %}';
+    let resyncPollInterval = null;
+
+    // Define a data padrão do seletor como hoje
+    const resyncDateInput = document.getElementById('resync-date');
+    const todayISO = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+    resyncDateInput.value = todayISO;
+    resyncDateInput.max = todayISO; // não permite datas futuras
+
+    function getCsrfToken() {
+        const el = document.querySelector('[name=csrfmiddlewaretoken]');
+        return el ? el.value : '';
+    }
+
+    function setResyncState(state) {
+        const btn = document.getElementById('btn-resync');
+        const icon = document.getElementById('resync-icon');
+        const label = document.getElementById('resync-label');
+
+        if (state === 'loading') {
+            btn.disabled = true;
+            label.textContent = 'Sincronizando...';
+            // Spinner SVG substituindo o ícone de reload
+            icon.innerHTML = `<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="30 10" class="animate-spin origin-center" style="transform-origin:center;animation:spin 1s linear infinite"/>`;
+            icon.style.animation = 'spin 1s linear infinite';
+            icon.style.transformOrigin = 'center';
+        } else {
+            btn.disabled = false;
+            label.textContent = 'Sincronizar Agora';
+            icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>`;
+            icon.style.animation = '';
+        }
+    }
+
+    function showResyncToast(type, html) {
+        const toast = document.getElementById('resync-toast');
+        const styles = {
+            loading: 'bg-violet-50 border-violet-200 text-violet-800',
+            success: 'bg-green-50 border-green-200 text-green-800',
+            partial: 'bg-orange-50 border-orange-200 text-orange-800',
+            error:   'bg-red-50 border-red-200 text-red-800',
+        };
+        toast.className = `mb-4 p-4 rounded-lg border text-sm font-medium ${styles[type] || styles.loading}`;
+        toast.innerHTML = html;
+        toast.classList.remove('hidden');
+    }
+
+    function hideResyncToast() {
+        document.getElementById('resync-toast').classList.add('hidden');
+    }
+
+    async function triggerERPSync() {
+        if (resyncPollInterval) return; // já está rodando
+
+        const selectedDate = resyncDateInput.value; // YYYY-MM-DD
+        const displayDate = selectedDate
+            ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')
+            : 'hoje';
+
+        setResyncState('loading');
+        showResyncToast('loading', `
+            <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite;transform-origin:center">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span>Iniciando sincronização de <strong>${displayDate}</strong>...</span>
+            </div>
+        `);
+
+        try {
+            const resp = await fetch(TRIGGER_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ date: selectedDate }),
+            });
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                throw new Error(data.detail || data.error || 'Erro ao disparar sincronização.');
+            }
+
+            const logId = data.log_id;
+            const syncDateDisplay = data.sync_date || displayDate;
+            showResyncToast('loading', `
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite;transform-origin:center">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span>Sincronizando pedidos de <strong>${syncDateDisplay}</strong>... aguarde.</span>
+                </div>
+            `);
+
+            // Polling de status
+            resyncPollInterval = setInterval(async () => {
+                try {
+                    const statusResp = await fetch(`/erp-sync/api/v1/erp-sync/status/${logId}/`, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    });
+                    const statusData = await statusResp.json();
+
+                    if (statusData.is_done) {
+                        clearInterval(resyncPollInterval);
+                        resyncPollInterval = null;
+                        setResyncState('idle');
+
+                        if (statusData.status === 'success') {
+                            showResyncToast('success', `
+                                ✅ <strong>Sincronização concluída!</strong>
+                                Recebidos: <strong>${statusData.orders_fetched}</strong> |
+                                Criados: <strong>${statusData.orders_created}</strong> |
+                                Atualizados: <strong>${statusData.orders_updated}</strong>
+                            `);
+                        } else if (statusData.status === 'partial') {
+                            showResyncToast('partial', `
+                                ⚠️ <strong>Sincronização parcial.</strong>
+                                Recebidos: ${statusData.orders_fetched} |
+                                Criados: ${statusData.orders_created} |
+                                Atualizados: ${statusData.orders_updated} |
+                                Erros: <strong>${statusData.orders_errors}</strong>
+                                ${statusData.error_detail ? `<br><span class="text-xs opacity-75">${statusData.error_detail}</span>` : ''}
+                            `);
+                        } else {
+                            showResyncToast('error', `
+                                ❌ <strong>Falha na sincronização.</strong>
+                                ${statusData.error_detail || 'Verifique os logs do worker para mais detalhes.'}
+                            `);
+                        }
+
+                        // Atualiza a tabela de logs recarregando a página após 2s
+                        setTimeout(() => window.location.reload(), 2000);
+                    }
+                } catch (err) {
+                    console.error('Erro no polling de status ERP:', err);
+                }
+            }, 1500); // polling a cada 1.5s
+
+        } catch (err) {
+            clearInterval(resyncPollInterval);
+            resyncPollInterval = null;
+            setResyncState('idle');
+            showResyncToast('error', `❌ ${err.message}`);
+        }
+    }
+
+    // CSS animation para o ícone de spinner
+    const style = document.createElement('style');
+    style.textContent = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
+    document.head.appendChild(style);
 </script>
 {% endblock %}

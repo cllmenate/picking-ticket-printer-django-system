@@ -139,6 +139,7 @@ class DatabaseImporter:
                 defaults={
                     "customer": customer,
                     "delivery": delivery,
+                    "import_source": "xlsx",
                     "total_volumes": order_data.get("total_volumes", None),
                     "status": "pending",
                     "situation": order_data.get("situation") or "",

@@ -66,6 +66,14 @@ class Order(models.Model):
     situation = models.CharField(
         max_length=100, verbose_name="Situação", blank=True
     )
+    import_source = models.CharField(
+        max_length=10,
+        verbose_name="Origem da Importação",
+        choices=[("xlsx", "Planilha (XLSX/XLS/PDF)"), ("api", "API ERP")],
+        default="xlsx",
+        db_index=True,
+    )
+
     pending_payment = models.CharField(
         max_length=100, verbose_name="Pendência", blank=True
     )

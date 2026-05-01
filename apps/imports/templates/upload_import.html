@@ -142,14 +142,22 @@
                 </span>
                 <h3 class="mt-0 mb-0 text-lg font-bold text-slate-800">Sincronizações via API ERP</h3>
             </div>
-            <button id="btn-resync"
-                onclick="triggerERPSync()"
-                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-violet-600 text-white border-0 cursor-pointer transition-all hover:bg-violet-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
-                <svg id="resync-icon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                </svg>
-                <span id="resync-label">Sincronizar Agora</span>
-            </button>
+            <div class="flex items-center gap-2">
+                <!-- Seletor de data para sincronização -->
+                <input
+                    type="date"
+                    id="resync-date"
+                    class="px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-violet-400 cursor-pointer"
+                />
+                <button id="btn-resync"
+                    onclick="triggerERPSync()"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-violet-600 text-white border-0 cursor-pointer transition-all hover:bg-violet-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
+                    <svg id="resync-icon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span id="resync-label">Sincronizar</span>
+                </button>
+            </div>
         </div>
         <div id="resync-toast" class="hidden mb-4 p-4 rounded-lg border text-sm font-medium"></div>
         {% if recent_sync_logs %}
@@ -337,8 +345,13 @@
 
     // ─── ERP Resync Button ─────────────────────────────────────────────────────
     const TRIGGER_URL = '{% url "erp-sync-trigger" %}';
-    const STATUS_URL_BASE = '/erp-sync/api/v1/erp-sync/status/';
     let resyncPollInterval = null;
+
+    // Define a data padrão do seletor como hoje
+    const resyncDateInput = document.getElementById('resync-date');
+    const todayISO = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+    resyncDateInput.value = todayISO;
+    resyncDateInput.max = todayISO; // não permite datas futuras
 
     function getCsrfToken() {
         const el = document.querySelector('[name=csrfmiddlewaretoken]');
@@ -385,13 +398,18 @@
     async function triggerERPSync() {
         if (resyncPollInterval) return; // já está rodando
 
+        const selectedDate = resyncDateInput.value; // YYYY-MM-DD
+        const displayDate = selectedDate
+            ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')
+            : 'hoje';
+
         setResyncState('loading');
         showResyncToast('loading', `
             <div class="flex items-center gap-2">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite;transform-origin:center">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                 </svg>
-                <span>Iniciando sincronização com a API ERP...</span>
+                <span>Iniciando sincronização de <strong>${displayDate}</strong>...</span>
             </div>
         `);
 
@@ -403,6 +421,7 @@
                     'X-Requested-With': 'XMLHttpRequest',
                     'Content-Type': 'application/json',
                 },
+                body: JSON.stringify({ date: selectedDate }),
             });
             const data = await resp.json();
 
@@ -411,12 +430,13 @@
             }
 
             const logId = data.log_id;
+            const syncDateDisplay = data.sync_date || displayDate;
             showResyncToast('loading', `
                 <div class="flex items-center gap-2">
                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite;transform-origin:center">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                     </svg>
-                    <span>Sincronizando pedidos do dia... aguarde.</span>
+                    <span>Sincronizando pedidos de <strong>${syncDateDisplay}</strong>... aguarde.</span>
                 </div>
             `);
 

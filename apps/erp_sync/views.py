@@ -33,39 +33,61 @@ class ERPSyncTriggerView(LoginRequiredMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
+        import json
         from datetime import date
 
         from django.conf import settings
 
         from apps.erp_sync.tasks import sync_erp_orders_task
 
-        today = date.today()
+        # Lê a data opcional do body (formato YYYY-MM-DD)
+        # Se não informada, usa hoje (comportamento padrão)
+        body = {}
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except (json.JSONDecodeError, Exception):
+            pass
+
+        raw_date = body.get("date", "").strip()
+        if raw_date:
+            try:
+                target_date = date.fromisoformat(raw_date)
+            except ValueError:
+                return Response(
+                    {"error": f"Data inválida: '{raw_date}'. Use o formato YYYY-MM-DD."},
+                    status=400,
+                )
+        else:
+            target_date = date.today()
+
         branch_ids = getattr(settings, "ERP_BRANCH_IDS", [27, 19])
         branch_ids_str = ",".join(str(b) for b in branch_ids)
 
-        # Cria o log de sincronização (status: running)
-        # A task vai encontrá-lo e atualizá-lo ao final.
-        # Nota: a task cria seu próprio log internamente — aqui apenas
-        # enfileiramos e retornamos para o frontend poder fazer polling.
+        # Cria o log pré-criado para polling imediato pelo frontend
         log = ERPSyncLog.objects.create(
-            sync_date=today,
+            sync_date=target_date,
             branch_ids=branch_ids_str,
             status=ERPSyncLog.StatusChoices.RUNNING,
         )
 
-        # Enfileira a task passando o log_id para que ela o atualize
-        sync_erp_orders_task.apply_async(kwargs={"manual_log_id": log.id})
+        # Enfileira a task com a data e o log_id
+        sync_erp_orders_task.apply_async(kwargs={
+            "manual_log_id": log.id,
+            "sync_date": target_date.strftime("%Y-%m-%d"),
+        })
 
         logger.info(
-            "ERP Sync: sincronização manual disparada pelo usuário %s — log_id=%s",
+            "ERP Sync: sincronização manual disparada pelo usuário %s — data=%s log_id=%s",
             request.user,
+            target_date,
             log.id,
         )
 
         return Response({
             "status": "queued",
             "log_id": log.id,
-            "message": "Sincronização iniciada. Acompanhe o progresso abaixo.",
+            "sync_date": target_date.strftime("%d/%m/%Y"),
+            "message": f"Sincronização de {target_date.strftime('%d/%m/%Y')} iniciada.",
         }, status=202)
 
 

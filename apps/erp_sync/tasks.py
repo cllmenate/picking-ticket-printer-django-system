@@ -30,9 +30,13 @@ logger = logging.getLogger(__name__)
     default_retry_delay=60,  # espera 60s antes de cada retry
     acks_late=True,
 )
-def sync_erp_orders_task(self, manual_log_id: int | None = None):  # type: ignore[override]
+def sync_erp_orders_task(
+    self,
+    manual_log_id: int | None = None,
+    sync_date: str | None = None,
+):  # type: ignore[override]
     """
-    Sincroniza os pedidos do dia atual com a API ERP.
+    Sincroniza os pedidos de uma data específica com a API ERP.
 
     Busca pedidos para cada filial em ERP_BRANCH_IDS (padrão: RJ=27, ES=19),
     insere novos e atualiza os existentes no banco de dados.
@@ -42,18 +46,29 @@ def sync_erp_orders_task(self, manual_log_id: int | None = None):  # type: ignor
         manual_log_id: quando disparada manualmente via botão Resync, recebe
                        o ID do log já criado pela view; caso contrário (Beat),
                        cria um novo log.
+        sync_date: data no formato 'YYYY-MM-DD' a sincronizar.
+                   Se não informada, usa o dia atual (comportamento do Beat).
     """
     # Import aqui para evitar circular import no carregamento do Celery
     from apps.erp_sync.models import ERPSyncLog
 
-    today = date.today()
-    today_str = today.strftime("%Y-%m-%d")
+    # Resolve a data alvo
+    if sync_date:
+        try:
+            target_date = date.fromisoformat(sync_date)
+        except ValueError:
+            logger.error("ERP Sync: data inválida recebida: %s — usando hoje.", sync_date)
+            target_date = date.today()
+    else:
+        target_date = date.today()
+
+    target_str = target_date.strftime("%Y-%m-%d")
     branch_ids: list[int] = getattr(settings, "ERP_BRANCH_IDS", [27, 19])
     branch_ids_str = ",".join(str(b) for b in branch_ids)
 
     logger.info(
         "ERP Sync: iniciando sincronização para data=%s filiais=%s (manual=%s)",
-        today_str,
+        target_str,
         branch_ids,
         manual_log_id is not None,
     )
@@ -66,19 +81,19 @@ def sync_erp_orders_task(self, manual_log_id: int | None = None):  # type: ignor
             sync_log.save(update_fields=["status"])
         except ERPSyncLog.DoesNotExist:
             sync_log = ERPSyncLog.objects.create(
-                sync_date=today,
+                sync_date=target_date,
                 branch_ids=branch_ids_str,
                 status=ERPSyncLog.StatusChoices.RUNNING,
             )
     else:
         sync_log = ERPSyncLog.objects.create(
-            sync_date=today,
+            sync_date=target_date,
             branch_ids=branch_ids_str,
             status=ERPSyncLog.StatusChoices.RUNNING,
         )
 
     try:
-        orders = ERPOrderService.fetch_orders_for_all_branches(today_str)
+        orders = ERPOrderService.fetch_orders_for_all_branches(target_str)
     except Exception as exc:
         logger.exception("ERP Sync: falha ao buscar pedidos da API: %s", exc)
         sync_log.status = ERPSyncLog.StatusChoices.ERROR
@@ -88,14 +103,12 @@ def sync_erp_orders_task(self, manual_log_id: int | None = None):  # type: ignor
         raise self.retry(exc=exc)
 
     if not orders:
-        logger.info("ERP Sync: nenhum pedido retornado para %s.", today_str)
+        logger.info("ERP Sync: nenhum pedido retornado para %s.", target_str)
         sync_log.status = ERPSyncLog.StatusChoices.SUCCESS
         sync_log.orders_fetched = 0
         sync_log.finished_at = datetime.now(timezone.utc)
         sync_log.save(
-            update_fields=[
-                "status", "orders_fetched", "finished_at"
-            ]
+            update_fields=["status", "orders_fetched", "finished_at"]
         )
         return {"status": "ok", "orders_fetched": 0}
 
@@ -129,7 +142,7 @@ def sync_erp_orders_task(self, manual_log_id: int | None = None):  # type: ignor
 
     logger.info(
         "ERP Sync: concluído — data=%s pedidos=%d criados=%d atualizados=%d erros=%d",
-        today_str,
+        target_str,
         len(orders),
         stats["created"],
         stats["updated"],
@@ -137,7 +150,7 @@ def sync_erp_orders_task(self, manual_log_id: int | None = None):  # type: ignor
     )
     return {
         "status": "ok",
-        "date": today_str,
+        "date": target_str,
         "orders_fetched": len(orders),
         **stats,
     }

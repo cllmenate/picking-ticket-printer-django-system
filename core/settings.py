@@ -15,10 +15,8 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
-import sentry_sdk
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
-from sentry_sdk.integrations.django import DjangoIntegration
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -35,7 +33,10 @@ if ENVIRONMENT == "development":
     environ.Env.read_env(BASE_DIR / ".env")
 
 SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
-if SENTRY_DSN:
+if SENTRY_DSN and SENTRY_DSN.startswith(("http://", "https://")):
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[DjangoIntegration()],

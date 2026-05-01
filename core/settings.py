@@ -98,6 +98,7 @@ INSTALLED_APPS = [
     "apps.imports",
     "apps.deliveries",
     "apps.ticket_printer",
+    "apps.erp_sync",
 ]
 
 MIDDLEWARE = [
@@ -296,6 +297,31 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+
+# ─── Celery Beat — Agendamento de tarefas periódicas ────────────────────────
+# Intervalo configurável via variável de ambiente (padrão: 10 minutos)
+_ERP_SYNC_INTERVAL_MINUTES = int(os.getenv("ERP_SYNC_INTERVAL_MINUTES", "10"))
+
+CELERY_BEAT_SCHEDULE = {
+    "sync-erp-orders-periodic": {
+        "task": "erp_sync.sync_erp_orders",
+        "schedule": _ERP_SYNC_INTERVAL_MINUTES * 60,  # em segundos
+    },
+}
+
+# ─── Integração ERP (API Avance) ─────────────────────────────────────────────
+# URL base, credenciais e filiais configuráveis via variáveis de ambiente
+ERP_API_BASE_URL = os.getenv("ERP_API_BASE_URL", "http://187.117.44.93:55050")
+ERP_API_USERNAME = os.getenv("ERP_API_USERNAME", "avance")
+ERP_API_PASSWORD = os.getenv("ERP_API_PASSWORD", "@@polmsgtiodp%%%348*op3!!gflopat")
+
+# IDs das filiais a sincronizar: RJ=27, ES=19
+# Para alterar via env: ERP_BRANCH_IDS=27,19
+_branch_ids_env = os.getenv("ERP_BRANCH_IDS", "27,19")
+ERP_BRANCH_IDS = [int(b.strip()) for b in _branch_ids_env.split(",") if b.strip()]
+
+# Intervalo em minutos (usado tanto pelo Beat quanto para referência)
+ERP_SYNC_INTERVAL_MINUTES = _ERP_SYNC_INTERVAL_MINUTES
 
 # Cache Configuration (Redis)
 if os.getenv("REDIS_URL") or os.getenv("POSTGRES_DB"):

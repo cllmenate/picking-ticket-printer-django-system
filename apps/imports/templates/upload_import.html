@@ -98,6 +98,7 @@
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Pedido</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Picking</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Cliente</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Origem</th>
                         <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Data de Importação</th>
                     </tr>
                 </thead>
@@ -107,6 +108,19 @@
                         <td class="py-3 px-4 border-b border-slate-200 font-medium text-slate-800 whitespace-nowrap">{{ order.order_number }}</td>
                         <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ order.picking }}</td>
                         <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ order.customer.name }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 whitespace-nowrap">
+                            {% if order.import_source == 'api' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                API ERP
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                Planilha
+                            </span>
+                            {% endif %}
+                        </td>
                         <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ order.created_at|date:"d/m/Y H:i" }}</td>
                     </tr>
                     {% endfor %}
@@ -118,6 +132,69 @@
         {% endif %}
     </div>
 </div>
+
+    <!-- Histórico de Sincronização via API ERP -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8 mt-8">
+        <div class="flex items-center gap-3 mb-6">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-violet-100">
+                <svg class="w-4 h-4 text-violet-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </span>
+            <h3 class="mt-0 mb-0 text-lg font-bold text-slate-800">Sincronizações via API ERP</h3>
+        </div>
+        {% if recent_sync_logs %}
+        <div class="overflow-x-auto w-full">
+            <table class="w-full border-collapse text-sm">
+                <thead>
+                    <tr>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Data Sync</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Filiais</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Recebidos</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Criados</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Atualizados</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Erros</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Status</th>
+                        <th class="text-left py-3 px-4 border-b border-slate-200 bg-slate-50 font-medium text-slate-500 whitespace-nowrap">Iniciado em</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_sync_logs %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-3 px-4 border-b border-slate-200 font-medium text-slate-800 whitespace-nowrap">{{ log.sync_date|date:"d/m/Y" }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ log.branch_ids }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap text-center">{{ log.orders_fetched }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-green-700 font-medium whitespace-nowrap text-center">{{ log.orders_created }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-blue-700 font-medium whitespace-nowrap text-center">{{ log.orders_updated }}</td>
+                        <td class="py-3 px-4 border-b border-slate-200 whitespace-nowrap text-center">
+                            {% if log.orders_errors > 0 %}
+                            <span class="text-red-600 font-semibold">{{ log.orders_errors }}</span>
+                            {% else %}
+                            <span class="text-slate-400">0</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 border-b border-slate-200 whitespace-nowrap">
+                            {% if log.status == 'running' %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Executando</span>
+                            {% elif log.status == 'success' %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Concluído</span>
+                            {% elif log.status == 'partial' %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Parcial</span>
+                            {% else %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Erro</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 border-b border-slate-200 text-slate-600 whitespace-nowrap">{{ log.created_at|date:"d/m/Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-500 text-sm m-0">Nenhuma sincronização via API registrada ainda.<br>
+            <span class="text-xs text-slate-400">As sincronizações começarão automaticamente após o deploy do serviço Beat.</span>
+        </p>
+        {% endif %}
+    </div>
+
 {% endblock %}
 
 {% block extra_scripts %}

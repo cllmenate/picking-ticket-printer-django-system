@@ -30,14 +30,18 @@ class UploadImportView(
     permission_required = "imports.add_importbatch"
 
     def get(self, request, *args, **kwargs):
+        from apps.erp_sync.models import ERPSyncLog
+
         recent_batches = ImportBatch.objects.order_by("-created_at")[:10]
         recent_orders = Order.objects.order_by("-created_at")[:10]
+        recent_sync_logs = ERPSyncLog.objects.order_by("-created_at")[:10]
         return render(
             request,
             self.template_name,
             {
                 "recent_batches": recent_batches,
                 "recent_orders": recent_orders,
+                "recent_sync_logs": recent_sync_logs,
             },
         )
 

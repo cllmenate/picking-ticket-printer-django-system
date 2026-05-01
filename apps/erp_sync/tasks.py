@@ -30,13 +30,18 @@ logger = logging.getLogger(__name__)
     default_retry_delay=60,  # espera 60s antes de cada retry
     acks_late=True,
 )
-def sync_erp_orders_task(self):  # type: ignore[override]
+def sync_erp_orders_task(self, manual_log_id: int | None = None):  # type: ignore[override]
     """
     Sincroniza os pedidos do dia atual com a API ERP.
 
     Busca pedidos para cada filial em ERP_BRANCH_IDS (padrão: RJ=27, ES=19),
     insere novos e atualiza os existentes no banco de dados.
     Registra o resultado em ERPSyncLog para auditoria.
+
+    Args:
+        manual_log_id: quando disparada manualmente via botão Resync, recebe
+                       o ID do log já criado pela view; caso contrário (Beat),
+                       cria um novo log.
     """
     # Import aqui para evitar circular import no carregamento do Celery
     from apps.erp_sync.models import ERPSyncLog
@@ -47,17 +52,30 @@ def sync_erp_orders_task(self):  # type: ignore[override]
     branch_ids_str = ",".join(str(b) for b in branch_ids)
 
     logger.info(
-        "ERP Sync: iniciando sincronização para data=%s filiais=%s",
+        "ERP Sync: iniciando sincronização para data=%s filiais=%s (manual=%s)",
         today_str,
         branch_ids,
+        manual_log_id is not None,
     )
 
-    # Cria o log de sincronização (status: running)
-    sync_log = ERPSyncLog.objects.create(
-        sync_date=today,
-        branch_ids=branch_ids_str,
-        status=ERPSyncLog.StatusChoices.RUNNING,
-    )
+    # Reutiliza o log criado pela view (resync manual) ou cria um novo (Beat)
+    if manual_log_id:
+        try:
+            sync_log = ERPSyncLog.objects.get(id=manual_log_id)
+            sync_log.status = ERPSyncLog.StatusChoices.RUNNING
+            sync_log.save(update_fields=["status"])
+        except ERPSyncLog.DoesNotExist:
+            sync_log = ERPSyncLog.objects.create(
+                sync_date=today,
+                branch_ids=branch_ids_str,
+                status=ERPSyncLog.StatusChoices.RUNNING,
+            )
+    else:
+        sync_log = ERPSyncLog.objects.create(
+            sync_date=today,
+            branch_ids=branch_ids_str,
+            status=ERPSyncLog.StatusChoices.RUNNING,
+        )
 
     try:
         orders = ERPOrderService.fetch_orders_for_all_branches(today_str)

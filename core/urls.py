@@ -55,6 +55,7 @@ urlpatterns = [
     path("customers/", include("apps.customers.urls")),
     path("deliveries/", include("apps.deliveries.urls")),
     path("imports/", include("apps.imports.urls")),
+    path("erp-sync/", include("apps.erp_sync.urls")),
     path("", include("apps.orders.urls")),
     path("products/", include("apps.products.urls")),
     path("printer/", include("apps.ticket_printer.urls")),

@@ -135,12 +135,23 @@
 
     <!-- Histórico de Sincronização via API ERP -->
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8 mt-8">
-        <div class="flex items-center gap-3 mb-6">
-            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-violet-100">
-                <svg class="w-4 h-4 text-violet-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-            </span>
-            <h3 class="mt-0 mb-0 text-lg font-bold text-slate-800">Sincronizações via API ERP</h3>
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-violet-100">
+                    <svg class="w-4 h-4 text-violet-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </span>
+                <h3 class="mt-0 mb-0 text-lg font-bold text-slate-800">Sincronizações via API ERP</h3>
+            </div>
+            <button id="btn-resync"
+                onclick="triggerERPSync()"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-violet-600 text-white border-0 cursor-pointer transition-all hover:bg-violet-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
+                <svg id="resync-icon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span id="resync-label">Sincronizar Agora</span>
+            </button>
         </div>
+        <div id="resync-toast" class="hidden mb-4 p-4 rounded-lg border text-sm font-medium"></div>
         {% if recent_sync_logs %}
         <div class="overflow-x-auto w-full">
             <table class="w-full border-collapse text-sm">
@@ -323,5 +334,147 @@
         progressContainer.classList.remove('block');
         progressContainer.classList.add('hidden');
     }
+
+    // ─── ERP Resync Button ─────────────────────────────────────────────────────
+    const TRIGGER_URL = '{% url "erp-sync-trigger" %}';
+    const STATUS_URL_BASE = '/erp-sync/api/v1/erp-sync/status/';
+    let resyncPollInterval = null;
+
+    function getCsrfToken() {
+        const el = document.querySelector('[name=csrfmiddlewaretoken]');
+        return el ? el.value : '';
+    }
+
+    function setResyncState(state) {
+        const btn = document.getElementById('btn-resync');
+        const icon = document.getElementById('resync-icon');
+        const label = document.getElementById('resync-label');
+
+        if (state === 'loading') {
+            btn.disabled = true;
+            label.textContent = 'Sincronizando...';
+            // Spinner SVG substituindo o ícone de reload
+            icon.innerHTML = `<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="30 10" class="animate-spin origin-center" style="transform-origin:center;animation:spin 1s linear infinite"/>`;
+            icon.style.animation = 'spin 1s linear infinite';
+            icon.style.transformOrigin = 'center';
+        } else {
+            btn.disabled = false;
+            label.textContent = 'Sincronizar Agora';
+            icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>`;
+            icon.style.animation = '';
+        }
+    }
+
+    function showResyncToast(type, html) {
+        const toast = document.getElementById('resync-toast');
+        const styles = {
+            loading: 'bg-violet-50 border-violet-200 text-violet-800',
+            success: 'bg-green-50 border-green-200 text-green-800',
+            partial: 'bg-orange-50 border-orange-200 text-orange-800',
+            error:   'bg-red-50 border-red-200 text-red-800',
+        };
+        toast.className = `mb-4 p-4 rounded-lg border text-sm font-medium ${styles[type] || styles.loading}`;
+        toast.innerHTML = html;
+        toast.classList.remove('hidden');
+    }
+
+    function hideResyncToast() {
+        document.getElementById('resync-toast').classList.add('hidden');
+    }
+
+    async function triggerERPSync() {
+        if (resyncPollInterval) return; // já está rodando
+
+        setResyncState('loading');
+        showResyncToast('loading', `
+            <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite;transform-origin:center">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span>Iniciando sincronização com a API ERP...</span>
+            </div>
+        `);
+
+        try {
+            const resp = await fetch(TRIGGER_URL, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json',
+                },
+            });
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                throw new Error(data.detail || data.error || 'Erro ao disparar sincronização.');
+            }
+
+            const logId = data.log_id;
+            showResyncToast('loading', `
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite;transform-origin:center">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span>Sincronizando pedidos do dia... aguarde.</span>
+                </div>
+            `);
+
+            // Polling de status
+            resyncPollInterval = setInterval(async () => {
+                try {
+                    const statusResp = await fetch(`/erp-sync/api/v1/erp-sync/status/${logId}/`, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    });
+                    const statusData = await statusResp.json();
+
+                    if (statusData.is_done) {
+                        clearInterval(resyncPollInterval);
+                        resyncPollInterval = null;
+                        setResyncState('idle');
+
+                        if (statusData.status === 'success') {
+                            showResyncToast('success', `
+                                ✅ <strong>Sincronização concluída!</strong>
+                                Recebidos: <strong>${statusData.orders_fetched}</strong> |
+                                Criados: <strong>${statusData.orders_created}</strong> |
+                                Atualizados: <strong>${statusData.orders_updated}</strong>
+                            `);
+                        } else if (statusData.status === 'partial') {
+                            showResyncToast('partial', `
+                                ⚠️ <strong>Sincronização parcial.</strong>
+                                Recebidos: ${statusData.orders_fetched} |
+                                Criados: ${statusData.orders_created} |
+                                Atualizados: ${statusData.orders_updated} |
+                                Erros: <strong>${statusData.orders_errors}</strong>
+                                ${statusData.error_detail ? `<br><span class="text-xs opacity-75">${statusData.error_detail}</span>` : ''}
+                            `);
+                        } else {
+                            showResyncToast('error', `
+                                ❌ <strong>Falha na sincronização.</strong>
+                                ${statusData.error_detail || 'Verifique os logs do worker para mais detalhes.'}
+                            `);
+                        }
+
+                        // Atualiza a tabela de logs recarregando a página após 2s
+                        setTimeout(() => window.location.reload(), 2000);
+                    }
+                } catch (err) {
+                    console.error('Erro no polling de status ERP:', err);
+                }
+            }, 1500); // polling a cada 1.5s
+
+        } catch (err) {
+            clearInterval(resyncPollInterval);
+            resyncPollInterval = null;
+            setResyncState('idle');
+            showResyncToast('error', `❌ ${err.message}`);
+        }
+    }
+
+    // CSS animation para o ícone de spinner
+    const style = document.createElement('style');
+    style.textContent = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
+    document.head.appendChild(style);
 </script>
 {% endblock %}

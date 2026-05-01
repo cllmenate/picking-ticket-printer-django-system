@@ -19,6 +19,7 @@ class OrderAdmin(ModelAdmin):
         "order_number",
         "delivery__route",
         "customer__name",
+        "import_source",
         "status",
         "created_at",
         "updated_at",
@@ -31,6 +32,7 @@ class OrderAdmin(ModelAdmin):
     )
     list_filter = (
         "status",
+        "import_source",
         "created_at",
         "delivery__route",
         "picking",

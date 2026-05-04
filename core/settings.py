@@ -15,10 +15,8 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
-import sentry_sdk
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
-from sentry_sdk.integrations.django import DjangoIntegration
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -35,7 +33,10 @@ if ENVIRONMENT == "development":
     environ.Env.read_env(BASE_DIR / ".env")
 
 SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
-if SENTRY_DSN:
+if SENTRY_DSN and SENTRY_DSN.startswith(("http://", "https://")):
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[DjangoIntegration()],
@@ -317,9 +318,10 @@ ERP_API_USERNAME = os.getenv("ERP_API_USERNAME", "avance")
 ERP_API_PASSWORD = os.getenv("ERP_API_PASSWORD", "@@polmsgtiodp%%%348*op3!!gflopat")
 
 # IDs das filiais a sincronizar: RJ=27, ES=19
-# Para alterar via env: ERP_BRANCH_IDS=27,19
-_branch_ids_env = os.getenv("ERP_BRANCH_IDS", "27,19")
-ERP_BRANCH_IDS = [int(b.strip()) for b in _branch_ids_env.split(",") if b.strip()]
+# Para alterar via env: ERP_BRANCH_IDS=27  ou  ERP_BRANCH_IDS=27,19
+_branch_ids_raw = os.getenv("ERP_BRANCH_IDS", "").strip()
+_branch_ids_parsed = [int(b.strip()) for b in _branch_ids_raw.split(",") if b.strip()]
+ERP_BRANCH_IDS = _branch_ids_parsed if _branch_ids_parsed else [27]
 
 # Intervalo em minutos (usado tanto pelo Beat quanto para referência)
 ERP_SYNC_INTERVAL_MINUTES = _ERP_SYNC_INTERVAL_MINUTES
